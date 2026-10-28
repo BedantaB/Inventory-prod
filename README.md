@@ -93,6 +93,15 @@ reload the sample data. Logins are kept.
 pnpm check          # typecheck + lint + tests (tests need no database)
 ```
 
+End-to-end tests (real browser, phone and desktop sizes) run against your dev project:
+
+```bash
+pnpm exec playwright install chromium   # once
+pnpm e2e
+```
+
+They log in with the seed logins, and create and then delete one temporary staff login.
+
 To try the app from your phone on the same Wi-Fi, run `pnpm dev --hostname 0.0.0.0` and
 open `http://<your-computer's-IP>:3000` on the phone.
 
