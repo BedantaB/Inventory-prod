@@ -1,0 +1,122 @@
+@AGENTS.md
+
+# Inventory app — working notes
+
+Inventory, stock and orders for an Indian wholesale business. Used by non-technical staff on
+low-end Android phones (godown) and a desktop (counter). Full design: `docs/PLAN.md`.
+Ideas not in scope go to `ROADMAP.md` — do not build unlisted features.
+
+## Commands
+
+```bash
+pnpm dev               # http://localhost:3000
+pnpm check             # typecheck + lint + unit/DB tests — run before every commit
+pnpm typecheck         # next typegen && tsc --noEmit
+pnpm lint
+pnpm test              # Vitest (src/**/*.test.ts, tests/**/*.test.ts); DB tests use PGlite, no setup needed
+pnpm e2e               # Playwright (needs .env.local + a seeded dev database)
+pnpm format
+
+pnpm db:generate --name=<what_changed>   # after editing src/db/schema/*
+pnpm db:generate --custom --name=<name>  # hand-written SQL migration (triggers, RLS, data)
+pnpm db:migrate        # apply migrations to MIGRATION_DATABASE_URL
+pnpm db:seed           # logins + sample data (add --reset to wipe business data first)
+```
+
+## Stack and versions to be aware of
+
+- **Next.js 16.4** with `cacheComponents` + `partialPrefetching` on. APIs differ from older
+  Next.js: read `node_modules/next/dist/docs/` before using a Next API. Notably, request-time
+  reads (`cookies()`, the session) must sit inside `<Suspense>`; middleware is `proxy.ts`.
+- React 19.3, Tailwind 4, shadcn/ui (radix-nova), Zod 4, Drizzle 0.45 (postgres-js), Vitest 5,
+  pnpm 12. Supabase keys use the new `sb_publishable_` / `sb_secret_` format.
+
+## Layout
+
+```
+src/app/            routes only — thin files that call into features/
+src/features/<x>/   one folder per feature: actions.ts (server actions), queries.ts,
+                    schemas.ts (Zod, shared client+server), components/, *.test.ts
+src/db/schema/      Drizzle tables, one file per area; index.ts re-exports
+src/db/migrations/  generated + custom SQL — always committed, never edited after applying
+src/db/seed/        seed script and sample data
+src/lib/            shared helpers (money, qty, financial-year, env)
+src/components/ui/  shadcn components
+tests/db/           database rule tests (PGlite + real migrations)
+e2e/                Playwright flows
+```
+
+## Rules that must not be broken
+
+**Money**
+
+- Stored and calculated as whole **paise** (`bigint`, JS `number`). Never floats for money.
+- Show money only via `formatINR()` (`src/lib/money.ts`) → `₹1,23,456.00`.
+- Parse typed amounts with `rupeesToPaise()`.
+- No GST anywhere for now (owner's decision; it's in ROADMAP).
+
+**Quantities**
+
+- `numeric(12,3)` in the DB, returned as strings. In TS use milli-units via `src/lib/qty.ts`
+  (`qtyFromDb`, `qtyToDb`, `parseQty`, `formatQty`, `lineTotalPaise`). Never `parseFloat`.
+- Decimals are allowed only when the item's unit has `allows_decimal` (kg, litre).
+
+**Stock**
+
+- `items.current_stock` and `items.avg_cost_paise` change **only** by inserting a
+  `stock_movements` row. The DB trigger `apply_stock_movement` updates the item, and a guard
+  trigger rejects any other change (error IV001). Don't try to update them directly.
+- Stock-in (IN) needs `unit_cost_paise` and `stock_entry_id`. The weighted average cost is
+  recalculated by the trigger.
+- Stock-out (OUT) needs `unit_price_paise` and `order_id`. The trigger records the average cost.
+- `stock_movements` rows are immutable (IV003). Completed orders are immutable except
+  `archived_at` (IV004).
+- Map DB errors with `getPgErrorCode()` + `DB_ERROR` (`src/db/errors.ts`).
+
+**Server is the source of truth**
+
+- All writes go through Server Actions.
+- Recalculate prices, totals and stock on the server from DB values; never trust client numbers.
+- Every server action starts with an auth check (logged in + `profiles.is_active`) and a role check.
+- **STAFF cannot:** manage users, change an existing item's selling price, archive anything.
+  **STAFF can:** set a price when creating an item, and set the selling price per order line.
+
+**Security**
+
+- RLS is enabled on every table. Policies allow SELECT for active logged-in users only, with
+  no write policies.
+- The app connects as the table owner via `DATABASE_URL`, so RLS doesn't apply to it. That is
+  why the server-side checks above are mandatory.
+- Any new table must enable RLS in its migration; `tests/db/security.test.ts` fails otherwise.
+- Secrets only in `.env.local` (gitignored). `SUPABASE_SECRET_KEY` and `src/db/index.ts` are
+  server-only.
+
+**Data conventions**
+
+- Tables have `id uuid`, `created_at`, `updated_at` (DB trigger), `created_by`.
+- Soft delete via `archived_at`; nothing is hard-deleted except discarded draft orders.
+- Exception: `stock_movements` has no `updated_at`/`archived_at` because it is a ledger.
+- "Vendors" in code/DB are the businesses we **sell to**; the UI calls them **Customers**.
+- Order numbers: `ORD-<financial year>-00001` (`src/lib/financial-year.ts`), gapless per FY via
+  `order_counters`.
+- Business dates use `Asia/Kolkata`.
+- Staff log in with a username mapped to `username@STAFF_EMAIL_DOMAIN`
+  (`src/features/users/login-identity.ts`). The admin uses a real email.
+
+**UI**
+
+- Plain words ("Add Stock", "New Order", "Customers"), no jargon. All UI text lives in
+  `src/i18n/` (Hindi will be added later) — no hard-coded strings in components.
+- Mobile first:
+  - min 44px tap targets, large fonts, high contrast, one clear primary button per screen
+  - bottom nav on mobile, sidebar on desktop
+  - `inputMode="decimal"`/`"numeric"` on number fields
+- Every action shows a loading state, a success toast and a friendly error that says what to do.
+  Confirm before destructive actions. Empty states invite the first action.
+- Lists: search box first, filtering as you type (debounced URL params), server-side pagination.
+- Keep client bundles small: Server Components by default, `"use client"` only where needed.
+
+## Workflow
+
+- Work in phases (see `docs/PLAN.md`). Stop after each phase for the owner to review.
+- Before committing: `pnpm check`. If schema changed: `pnpm db:generate` and commit the migration.
