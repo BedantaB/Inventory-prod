@@ -9,6 +9,7 @@ import { requireUser } from "@/features/auth/session";
 import { failure, fieldFailure, parseForm, success, type ActionResult } from "@/lib/forms";
 import { formatQty, QTY_SCALE } from "@/lib/qty";
 import { getMessages } from "@/i18n";
+import { lastCosts } from "@/features/inventory/data";
 import * as data from "./data";
 import { checkImport, type ImportProblem } from "./import";
 import { checkPhoto, deleteItemPhoto, photoFilesFrom, uploadItemPhoto } from "./photos";
@@ -321,4 +322,51 @@ export async function runImportAction(
       return failure("import.changedSinceCheck");
     throw error;
   }
+}
+
+// ---- Item picker (Add Stock, New Order) ----
+
+export type PickerItem = {
+  id: string;
+  label: string;
+  sku: string;
+  packSize: string | null;
+  brandName: string | null;
+  unitName: string;
+  allowsDecimal: boolean;
+  stockMilli: number;
+  mrpPaise: number | null;
+  sellingPricePaise: number | null;
+  photoPath: string | null;
+  /** Last stock-in cost. Owner only (null for staff). */
+  lastCostPaise: number | null;
+};
+
+/** Search-as-you-type for the item picker: top 10 active items. */
+export async function searchItemsAction(query: string): Promise<PickerItem[]> {
+  const actor = await requireUser();
+  const q = query.trim().slice(0, 100);
+  if (q.length < 2) return [];
+  const db = getDb();
+  const { rows } = await data.listItems(db, { q, limit: 10 });
+  const costs = can(actor, "viewCost")
+    ? await lastCosts(
+        db,
+        rows.map((r) => r.id),
+      )
+    : new Map();
+  return rows.map((r) => ({
+    id: r.id,
+    label: data.itemDisplayName(r),
+    sku: r.sku,
+    packSize: r.packSize,
+    brandName: r.brandName,
+    unitName: r.unitName,
+    allowsDecimal: r.unitAllowsDecimal,
+    stockMilli: r.stockMilli,
+    mrpPaise: r.mrpPaise,
+    sellingPricePaise: r.sellingPricePaise,
+    photoPath: r.photoPath,
+    lastCostPaise: costs.get(r.id) ?? null,
+  }));
 }

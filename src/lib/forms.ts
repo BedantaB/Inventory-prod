@@ -43,11 +43,14 @@ export function formDataToObject(formData: FormData): Record<string, string> {
   return result;
 }
 
-/** Zod issues → first error per field. Schema messages are i18n keys (see schemas.ts files). */
+/**
+ * Zod issues → first error per field. Schema messages are i18n keys (see schemas.ts files).
+ * Nested fields use dotted names, e.g. "lines.2.quantity" for the third line's quantity.
+ */
 export function zodFieldErrors(error: z.ZodError): FieldErrors {
   const errors: FieldErrors = {};
   for (const issue of error.issues) {
-    const field = String(issue.path[0] ?? "form");
+    const field = issue.path.length > 0 ? issue.path.map(String).join(".") : "form";
     if (!errors[field]) errors[field] = { key: issue.message as MessageKey };
   }
   return errors;

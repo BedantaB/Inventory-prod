@@ -1,4 +1,4 @@
-import { CopyPlusIcon, HistoryIcon, PencilIcon } from "lucide-react";
+import { CopyPlusIcon, PackagePlusIcon, PencilIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -11,6 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
+import { Pagination } from "@/components/pagination";
+import { StockHistory } from "@/features/inventory/components/stock-history";
+import { listItemMovements } from "@/features/inventory/queries";
 import { ItemArchiveAction } from "@/features/items/components/item-archive-action";
 import { ItemPhoto } from "@/features/items/components/item-photo";
 import { StockBadge } from "@/features/items/components/stock-badge";
@@ -19,23 +22,25 @@ import { getItem } from "@/features/items/queries";
 import { format, getMessages } from "@/i18n";
 import { formatDate } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
+import { parsePage } from "@/lib/list-params";
 import { formatQty, lineTotalPaise } from "@/lib/qty";
 
 export const metadata: Metadata = { title: "Item" };
 
-export default function ItemPage({ params }: PageProps<"/items/[id]">) {
+export default function ItemPage({ params, searchParams }: PageProps<"/items/[id]">) {
   return (
     <Suspense fallback={<Skeleton className="h-96 max-w-3xl" />}>
-      <ItemDetails params={params} />
+      <ItemDetails params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">) {
+async function ItemDetails({ params, searchParams }: PageProps<"/items/[id]">) {
   const m = getMessages();
   const user = await requireUser();
-  const item = await getItem((await params).id);
+  const [item, sp] = await Promise.all([getItem((await params).id), searchParams]);
   if (!item) notFound();
+  const history = await listItemMovements(item.id, parsePage(sp.page));
   const showCost = can(user, "viewCost");
   const unit = item.unitName;
 
@@ -129,12 +134,28 @@ async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">)
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex items-center gap-3 text-muted-foreground">
-            <HistoryIcon className="size-5 shrink-0" aria-hidden />
-            {m.items.stockHistoryLater}
-          </CardContent>
-        </Card>
+        <section aria-labelledby="history-heading">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 id="history-heading" className="text-xl font-bold">
+              {m.stock.history}
+            </h2>
+            {!item.archivedAt && (
+              <Button variant="outline" asChild>
+                <Link href="/stock/new">
+                  <PackagePlusIcon aria-hidden />
+                  {m.nav.addStock}
+                </Link>
+              </Button>
+            )}
+          </div>
+          <StockHistory rows={history.rows} unit={unit} showCost={showCost} m={m} />
+          <Pagination
+            page={history.page}
+            total={history.total}
+            pathname={`/items/${item.id}`}
+            searchParams={sp}
+          />
+        </section>
 
         <div className="flex flex-col gap-3 sm:flex-row">
           {!item.archivedAt && (

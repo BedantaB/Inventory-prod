@@ -99,6 +99,11 @@ export function useServerForm<Data = undefined>(
     }
   };
 
+  /** Remove errors whose field name matches (e.g. after picking an item or removing a line). */
+  const clearErrors = useCallback((match: (name: string) => boolean) => {
+    setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([name]) => !match(name))));
+  }, []);
+
   const errorFor = (name: string) => {
     const error = errors[name];
     return error ? t(error.key, error.vars) : undefined;
@@ -107,6 +112,7 @@ export function useServerForm<Data = undefined>(
   return {
     pending,
     errorFor,
+    clearErrors,
     formProps: { onSubmit, onBlur, onChange, onKeyDown: moveToNextFieldOnEnter, noValidate: true },
   };
 }

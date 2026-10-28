@@ -4,6 +4,7 @@ import { SaveIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FormField } from "@/components/form/form-field";
+import { FreshForm } from "@/components/form/fresh-form";
 import { MoneyInput } from "@/components/form/money-input";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useServerForm } from "@/components/form/use-server-form";
@@ -28,14 +29,7 @@ type Option = { id: string; name: string };
 
 const money = (paise: number | null | undefined) => (paise != null ? paiseToInput(paise) : "");
 
-export function ItemForm({
-  item,
-  copyFrom,
-  categories,
-  brands,
-  units,
-  canEditPrice,
-}: {
+type ItemFormProps = {
   /** The item being edited. Absent when creating. */
   item?: ItemView;
   /** "Add another colour": a new item that starts as a copy of this one. */
@@ -44,7 +38,23 @@ export function ItemForm({
   brands: Option[];
   units: Unit[];
   canEditPrice: boolean;
-}) {
+};
+
+export function ItemForm(props: ItemFormProps) {
+  // Editing keeps what was typed; adding starts fresh after each save.
+  if (props.item) return <ItemFormBody {...props} />;
+  return <FreshForm>{(onSaved) => <ItemFormBody {...props} onSaved={onSaved} />}</FreshForm>;
+}
+
+function ItemFormBody({
+  item,
+  copyFrom,
+  categories,
+  brands,
+  units,
+  canEditPrice,
+  onSaved,
+}: ItemFormProps & { onSaved?: () => void }) {
   const m = useMessages();
   const router = useRouter();
   const photo = useRef<PickedPhoto>(null);
@@ -79,6 +89,7 @@ export function ItemForm({
     onSuccess: (result) => {
       const id = item?.id ?? result.data?.id;
       router.push(id ? `/items/${id}` : "/items");
+      onSaved?.();
     },
   });
 

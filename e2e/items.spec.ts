@@ -161,7 +161,7 @@ test.describe("items (owner)", () => {
     });
     await expect(page.getByText(/Unit “carton” not found/)).toBeVisible();
     await expect(page.getByText("Please fill this in.")).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Import \d+ items/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Import all/ })).toHaveCount(0);
 
     // A good sheet imports in one go.
     await file.setInputFiles({
@@ -173,10 +173,10 @@ test.describe("items (owner)", () => {
           `E2E Ruler ${stamp},Yellow,E2E Brand ${stamp},pcs,30 cm,12,10\n`,
       ),
     });
-    await expect(page.getByText("2 items are ready to import.")).toBeVisible();
-    await expect(page.getByText(/1 new brands/)).toBeVisible();
-    await page.getByRole("button", { name: "Import 2 items" }).click();
-    await expect(page.getByText("2 items imported.")).toBeVisible();
+    await expect(page.getByText("Ready to import: 2 items.")).toBeVisible();
+    await expect(page.getByText(/New brands: 1/)).toBeVisible();
+    await page.getByRole("button", { name: "Import all (2)" }).click();
+    await expect(page.getByText("Done. Items imported: 2.")).toBeVisible();
     await expect(page).toHaveURL(/\/items\?sort=recent/);
     await expect(
       page.getByRole("link", { name: new RegExp(`E2E Ruler ${stamp} – Green`) }),

@@ -104,10 +104,13 @@ export type ItemListParams = {
   sort?: ItemSort;
   page?: number;
   archived?: boolean;
+  /** Rows per page (default PAGE_SIZE). */
+  limit?: number;
 };
 
 export async function listItems(db: Database, params: ItemListParams) {
   const page = params.page ?? 1;
+  const limit = params.limit ?? PAGE_SIZE;
   const conditions: (SQL | undefined)[] = [
     params.archived ? isNotNull(items.archivedAt) : isNull(items.archivedAt),
   ];
@@ -133,8 +136,8 @@ export async function listItems(db: Database, params: ItemListParams) {
     selectItems(db)
       .where(where)
       .orderBy(...sortOrder[params.sort ?? "name"])
-      .limit(PAGE_SIZE)
-      .offset((page - 1) * PAGE_SIZE),
+      .limit(limit)
+      .offset((page - 1) * limit),
     db
       .select({ total: sql<number>`count(*)`.mapWith(Number) })
       .from(items)

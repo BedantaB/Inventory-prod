@@ -3,6 +3,7 @@
 import { UserPlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormField } from "@/components/form/form-field";
+import { FreshForm } from "@/components/form/fresh-form";
 import { PasswordInput } from "@/components/form/password-input";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useServerForm } from "@/components/form/use-server-form";
@@ -13,11 +14,18 @@ import { createUserSchema } from "../schemas";
 import { RolePicker } from "./role-picker";
 
 export function CreateUserForm() {
+  return <FreshForm>{(onSaved) => <CreateUserFormBody onSaved={onSaved} />}</FreshForm>;
+}
+
+function CreateUserFormBody({ onSaved }: { onSaved: () => void }) {
   const m = useMessages();
   const router = useRouter();
   const { pending, errorFor, formProps } = useServerForm(createStaffUser, {
     schema: createUserSchema,
-    onSuccess: () => router.push("/users"),
+    onSuccess: () => {
+      router.push("/users");
+      onSaved();
+    },
   });
 
   return (

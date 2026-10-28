@@ -40,14 +40,15 @@ export async function createUser(
     username,
     role = "STAFF",
     isActive = true,
-  }: { username: string; role?: "ADMIN" | "STAFF"; isActive?: boolean },
+    fullName = username,
+  }: { username: string; role?: "ADMIN" | "STAFF"; isActive?: boolean; fullName?: string },
 ) {
   const id = crypto.randomUUID();
   const email = `${username}@staff.test`;
   await db.execute(`INSERT INTO auth.users (id, email) VALUES ('${id}', '${email}')`);
   const [profile] = await db
     .insert(schema.profiles)
-    .values({ id, username, fullName: username, email, role, isActive })
+    .values({ id, username, fullName, email, role, isActive })
     .returning();
   return profile;
 }

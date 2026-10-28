@@ -74,6 +74,11 @@ e2e/                Playwright flows
     toasts.
   - Build fields with `<FormField>` and `<SubmitButton>`.
   - Zod messages are i18n keys like `"validation.required"`.
+- **"Add new" forms:**
+  - Wrap them in `<FreshForm>` so they start empty after a save. Next keeps visited pages alive,
+    so without it the saved values would still show.
+- **Choosing an item:** `<ItemPicker>` (search as you type, keyboard accessible), backed by
+  `searchItemsAction`.
 - **Destructive actions:** `<ConfirmAction>`.
 - **Lists:** `<SearchBox>` (URL `?q=`), `<EmptyState>`, `<PageHeader>`.
 - **Data access:**
@@ -112,6 +117,8 @@ e2e/                Playwright flows
 - Stock-in (IN) needs `unit_cost_paise` and `stock_entry_id`. The weighted average cost is
   recalculated by the trigger.
 - Stock-out (OUT) needs `unit_price_paise` and `order_id`. The trigger records the average cost.
+- Order ledger rows by `seq`, not by `created_at`: rows written in one transaction share
+  `created_at`.
 - `stock_movements` rows are immutable (IV003). Completed orders are immutable except
   `archived_at` (IV004).
 - Map DB errors with `getPgErrorCode()` + `DB_ERROR` (`src/db/errors.ts`).

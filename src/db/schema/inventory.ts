@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createdBy, paise, quantity, timestamps } from "./columns";
 import { items } from "./items";
 import { orders } from "./orders";
@@ -24,6 +24,9 @@ export const stockMovements = pgTable(
   "stock_movements",
   {
     id: uuid().primaryKey().defaultRandom(),
+    // Running number in the order rows were written. Lines saved in one transaction share
+    // the same created_at, so this keeps them in the order they were entered.
+    seq: bigint({ mode: "number" }).generatedAlwaysAsIdentity(),
     type: movementType().notNull(),
     itemId: uuid()
       .notNull()

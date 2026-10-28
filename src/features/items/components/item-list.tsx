@@ -52,7 +52,7 @@ export function ItemList({
           >
             <ItemPhoto path={item.photoPath} alt="" className="size-12 sm:size-14" />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-base font-semibold sm:text-lg">
+              <span className="line-clamp-2 text-base font-semibold break-words sm:text-lg">
                 {itemDisplayName(item)}
               </span>
               <span className="truncate text-sm text-muted-foreground">

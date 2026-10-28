@@ -16,6 +16,8 @@ Ideas that are **not** part of v1. Each one waits for the owner's go-ahead.
 - **Stock correction screen**: count the shelf and fix the number (`ADJUST` movements already
   exist in the database), with a required reason.
 - **Suppliers**: record who supplied each Add Stock bill, and keep purchase history per supplier.
+- **List of all stock bills**: browse every Add Stock entry by date or bill number. Today a bill
+  is reached from the item's stock history.
 - **Loose selling from packs**: sell single pieces out of a box, with unit conversion.
 - **Multiple godowns**: track stock per location, and move stock between them.
 - **Barcode scanning**: use the phone camera to find items quickly.

@@ -75,8 +75,16 @@ export async function cleanupTestData() {
       ]);
       await adminClient().storage.from("item-photos").remove(paths);
     }
-    // Only rows with no stock history or orders can be removed; tests don't create any.
-    await sql`DELETE FROM items WHERE name LIKE 'E2E %'`;
+    // Stock history can never be deleted by the app (trigger stock_movements_immutable).
+    // Test cleanup on the DEV database switches that guard off for a moment, only to remove
+    // rows belonging to "E2E" items, inside one transaction.
+    await sql.begin(async (tx) => {
+      await tx`ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_immutable`;
+      await tx`DELETE FROM stock_movements WHERE item_id IN (SELECT id FROM items WHERE name LIKE 'E2E %')`;
+      await tx`ALTER TABLE stock_movements ENABLE TRIGGER stock_movements_immutable`;
+      await tx`DELETE FROM stock_entries e WHERE NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.stock_entry_id = e.id)`;
+      await tx`DELETE FROM items WHERE name LIKE 'E2E %'`;
+    });
     await sql`DELETE FROM categories WHERE name LIKE 'E2E %'`;
     await sql`DELETE FROM brands WHERE name LIKE 'E2E %'`;
     await sql`DELETE FROM vendors WHERE business_name LIKE 'E2E %'`;
@@ -96,4 +104,22 @@ export function testPng(): { name: string; mimeType: string; buffer: Buffer } {
       "base64",
     ),
   };
+}
+
+/** Creates a throwaway item straight in the database (faster than the form). */
+export async function createTestItem(name: string, unit = "pcs"): Promise<string> {
+  const { default: postgres } = await import("postgres");
+  const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
+  try {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO items (name, unit_id, mrp_paise, selling_price_paise, created_by)
+      SELECT ${name}, u.id, 2500, 2000, p.id
+      FROM units u, profiles p
+      WHERE u.name = ${unit} AND p.role = 'ADMIN'
+      LIMIT 1
+      RETURNING id`;
+    return row.id;
+  } finally {
+    await sql.end();
+  }
 }
