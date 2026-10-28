@@ -1,9 +1,10 @@
 import { defineConfig } from "drizzle-kit";
 
+// ENV_FILE=.env.production.local pnpm db:migrate  →  migrate the production database.
 try {
-  process.loadEnvFile(".env.local");
+  process.loadEnvFile(process.env.ENV_FILE ?? ".env.local");
 } catch {
-  // .env.local is optional here: `drizzle-kit generate` needs no database.
+  // Optional here: `drizzle-kit generate` needs no database.
 }
 
 export default defineConfig({

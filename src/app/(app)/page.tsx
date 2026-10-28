@@ -1,21 +1,11 @@
-import {
-  PackageIcon,
-  PackagePlusIcon,
-  ReceiptTextIcon,
-  ShoppingCartIcon,
-  StoreIcon,
-  UserCogIcon,
-  type LucideIcon,
-} from "lucide-react";
-import Link from "next/link";
 import { Suspense } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
-import { format, getMessages, type Messages } from "@/i18n";
-import { cn } from "@/lib/utils";
-
-// The full dashboard (stock value, low stock, today's sales) arrives in Phase 5.
+import { DashboardView } from "@/features/dashboard/components/dashboard-view";
+import { getDashboard } from "@/features/dashboard/queries";
+import { format, getMessages } from "@/i18n";
 
 export default function HomePage({ searchParams }: PageProps<"/">) {
   return (
@@ -25,41 +15,10 @@ export default function HomePage({ searchParams }: PageProps<"/">) {
   );
 }
 
-type Tile = {
-  href: string;
-  icon: LucideIcon;
-  label: keyof Messages["nav"];
-  hint: keyof Messages["home"];
-  primary?: boolean;
-};
-
-const TILES: Tile[] = [
-  {
-    href: "/orders/new",
-    icon: ShoppingCartIcon,
-    label: "newOrder",
-    hint: "newOrderHint",
-    primary: true,
-  },
-  {
-    href: "/stock/new",
-    icon: PackagePlusIcon,
-    label: "addStock",
-    hint: "addStockHint",
-    primary: true,
-  },
-  { href: "/items", icon: PackageIcon, label: "items", hint: "itemsHint" },
-  { href: "/customers", icon: StoreIcon, label: "customers", hint: "customersHint" },
-  { href: "/orders", icon: ReceiptTextIcon, label: "orders", hint: "ordersHint" },
-];
-
-const ADMIN_TILE: Tile = { href: "/users", icon: UserCogIcon, label: "users", hint: "usersHint" };
-
 async function HomeContent({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const m = getMessages();
   const user = await requireUser();
-  const denied = (await searchParams).denied === "1";
-  const tiles = user.role === "ADMIN" ? [...TILES, ADMIN_TILE] : TILES;
+  const [sp, data] = await Promise.all([searchParams, getDashboard(can(user, "viewCost"))]);
 
   return (
     <>
@@ -69,56 +28,33 @@ async function HomeContent({ searchParams }: Pick<PageProps<"/">, "searchParams"
         </h1>
         <p className="text-base text-muted-foreground">{m.home.subtitle}</p>
       </header>
-
-      {denied && (
+      {sp.denied === "1" && (
         <Alert variant="destructive" className="mb-6">
           <AlertDescription className="text-base">{m.home.denied}</AlertDescription>
         </Alert>
       )}
-
-      <h2 className="sr-only">{m.home.quickActions}</h2>
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tiles.map((tile) => (
-          <li key={tile.href}>
-            <Link
-              href={tile.href}
-              className={cn(
-                "flex min-h-20 items-center gap-4 rounded-xl border p-4 transition-colors",
-                tile.primary
-                  ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-card hover:bg-secondary",
-              )}
-            >
-              <tile.icon className="size-8 shrink-0" aria-hidden />
-              <span className="flex flex-col">
-                <span className="text-lg font-semibold">{m.nav[tile.label]}</span>
-                <span
-                  className={cn(
-                    "text-sm",
-                    tile.primary ? "text-primary-foreground/90" : "text-muted-foreground",
-                  )}
-                >
-                  {m.home[tile.hint]}
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <DashboardView data={data} m={m} />
     </>
   );
 }
 
 function HomeSkeleton() {
   return (
-    <div aria-busy="true">
-      <Skeleton className="mb-2 h-9 w-64" />
-      <Skeleton className="mb-6 h-5 w-48" />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="h-20" />
+    <div aria-busy="true" className="flex flex-col gap-6">
+      <div>
+        <Skeleton className="mb-2 h-9 w-64" />
+        <Skeleton className="h-5 w-48" />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-28" />
         ))}
       </div>
+      <Skeleton className="h-64" />
     </div>
   );
 }

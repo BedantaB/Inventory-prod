@@ -110,6 +110,9 @@ See `src/db/schema/*` and `src/db/migrations/`. Tables:
 
 **Phase 5: Dashboard and finishing**
 
-- Dashboard
-- Polish pass, Playwright flows
-- DEPLOYMENT.md
+- Dashboard: today's sales, items, stock value (owner), low/out of stock, unfinished orders,
+  recent activity
+- Polish pass: axe accessibility audit on all main screens, contrast fix, global error page,
+  database connection fix
+- Playwright flows for every feature
+- DEPLOYMENT.md, `pnpm owner:create`, Vercel region (Mumbai)

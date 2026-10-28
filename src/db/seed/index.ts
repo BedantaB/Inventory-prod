@@ -21,6 +21,11 @@ try {
   console.error("✖ .env.local not found. Copy .env.example to .env.local and fill it in.");
   process.exit(1);
 }
+// The sample data is for development only (see DEPLOYMENT.md: use `pnpm owner:create`).
+if (process.env.ENV_FILE || process.env.NODE_ENV === "production") {
+  console.error("✖ The seed script is for the development database only.");
+  process.exit(1);
+}
 
 const envResult = z
   .object({

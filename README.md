@@ -126,4 +126,6 @@ open `http://<your-computer's-IP>:3000` on the phone.
 
 ## Deployment
 
-Covered in `DEPLOYMENT.md` (added in Phase 5).
+See **[DEPLOYMENT.md](DEPLOYMENT.md)**: a step-by-step guide for Supabase (production project in
+Mumbai) and Vercel. On production you create only the owner login (`pnpm owner:create`), never
+the sample data.

@@ -20,7 +20,9 @@ pnpm format
 pnpm db:generate --name=<what_changed>   # after editing src/db/schema/*
 pnpm db:generate --custom --name=<name>  # hand-written SQL migration (triggers, RLS, data)
 pnpm db:migrate        # apply migrations to MIGRATION_DATABASE_URL
-pnpm db:seed           # logins + sample data (add --reset to wipe business data first)
+pnpm db:seed           # DEV ONLY: logins + sample data (add --reset to wipe business data first)
+pnpm owner:create      # production: create the owner login only (ENV_FILE=.env.production.local)
+# ENV_FILE=.env.production.local pnpm db:migrate   → migrate production (see DEPLOYMENT.md)
 ```
 
 ## Stack and versions to be aware of
@@ -137,6 +139,12 @@ e2e/                Playwright flows
 - Every server action starts with an auth check (logged in + `profiles.is_active`) and a role check.
 - **STAFF cannot:** manage users, change an existing item's selling price, archive anything.
   **STAFF can:** set a price when creating an item, and set the selling price per order line.
+
+**Database connection**
+
+- Supabase's pooler needs `prepare: false` and `max_pipeline: 1` (`src/db/create.ts`).
+- With pipelining on, a page running several queries at once stalls forever with no error
+  (it happened on the dashboard). Don't remove it.
 
 **Security**
 

@@ -14,7 +14,8 @@ import { rupeesToPaise } from "@/lib/money";
 import { parseQty, qtyToDb } from "@/lib/qty";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const IST_OFFSET_MS = 5.5 * HOUR_MS;
 
 /** Midnight (Indian time) of the day containing `ms`. */
 function startOfDayIst(ms: number) {
@@ -102,7 +103,11 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
     const timeline = [
       ...seedStockEntries.map((entry) => ({ at: now - entry.daysAgo * DAY_MS, entry })),
       ...seedOrders.map((order) => ({
-        at: startOfDayIst(now - order.daysAgo * DAY_MS) + order.hour * 60 * 60 * 1000,
+        // A negative hour means "that many hours ago" (today's orders), kept within today.
+        at:
+          order.hour < 0
+            ? Math.max(now + order.hour * HOUR_MS, startOfDayIst(now) + 60_000 * (10 + order.hour))
+            : startOfDayIst(now - order.daysAgo * DAY_MS) + order.hour * HOUR_MS,
         order,
       })),
     ]

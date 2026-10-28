@@ -37,3 +37,7 @@ Ideas that are **not** part of v1. Each one waits for the owner's go-ahead.
   when DOMS sends a new price list).
 - **Activity log**: who changed what, for item edits and archiving.
 - **Offline mode** for weak godown signal.
+- **Dark mode**: optional in the brief and not built. The colours are already set up for it in
+  `globals.css`.
+- **Shop settings page**: change the printed shop name/address in the app instead of
+  `BUSINESS_*` settings.
