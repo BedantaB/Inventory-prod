@@ -60,3 +60,39 @@ export async function deleteLoginByEmail(email: string) {
   // Deleting the auth user also deletes the profile (ON DELETE CASCADE).
   if (user) await admin.deleteUser(user.id);
 }
+
+/** Direct database access for cleaning up rows the tests create (names start with "E2E "). */
+export async function cleanupTestData() {
+  const { default: postgres } = await import("postgres");
+  const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
+  try {
+    const photos = await sql<{ photo_path: string }[]>`
+      SELECT photo_path FROM items WHERE name LIKE 'E2E %' AND photo_path IS NOT NULL`;
+    if (photos.length > 0) {
+      const paths = photos.flatMap((p) => [
+        p.photo_path,
+        p.photo_path.replace(/\.jpg$/, ".thumb.jpg"),
+      ]);
+      await adminClient().storage.from("item-photos").remove(paths);
+    }
+    // Only rows with no stock history or orders can be removed; tests don't create any.
+    await sql`DELETE FROM items WHERE name LIKE 'E2E %'`;
+    await sql`DELETE FROM categories WHERE name LIKE 'E2E %'`;
+    await sql`DELETE FROM vendors WHERE business_name LIKE 'E2E %'`;
+  } finally {
+    await sql.end();
+  }
+}
+
+/** A small valid PNG (a coloured square) for photo upload tests. */
+export function testPng(): { name: string; mimeType: string; buffer: Buffer } {
+  return {
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAQ0lEQVR4nO3PQQ0AIBDAsIF/z6cK" +
+        "oQkdJr2+M3a5XQCcbgTQAaAKgCoAqgCoAqAKgCoAqgCoAqAKgCoAqgCoAqDqAeC4AUFRIUT8AAAAAElFTkSuQmCC",
+      "base64",
+    ),
+  };
+}

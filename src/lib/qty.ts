@@ -41,6 +41,11 @@ export function qtyToDb(milli: number): string {
   return `${sign}${Math.trunc(abs / QTY_SCALE)}.${String(abs % QTY_SCALE).padStart(3, "0")}`;
 }
 
+/** Plain text for an input box (no grouping): 2500 → "2.5", 10000 → "10". */
+export function qtyToInput(milli: number): string {
+  return qtyToDb(milli).replace(/\.?0+$/, "");
+}
+
 const qtyFormatter = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 });
 
 /** 1250000 → "1,250", 2500 → "2.5" */

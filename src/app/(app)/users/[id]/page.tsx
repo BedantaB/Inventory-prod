@@ -11,7 +11,7 @@ import { RoleBadge, StatusBadge } from "@/features/users/components/user-badges"
 import { UserStatusAction } from "@/features/users/components/user-status-action";
 import { getUserById } from "@/features/users/queries";
 import { getMessages } from "@/i18n";
-import { BackToUsers } from "../back-link";
+import { BackLink } from "@/components/back-link";
 
 export const metadata: Metadata = { title: "Edit login" };
 
@@ -32,7 +32,11 @@ async function EditUser({ params }: Pick<PageProps<"/users/[id]">, "params">) {
 
   return (
     <>
-      <PageHeader title={user.fullName} subtitle={user.username} back={<BackToUsers />} />
+      <PageHeader
+        title={user.fullName}
+        subtitle={user.username}
+        back={<BackLink href="/users" label={m.users.title} />}
+      />
       <div className="mb-6 flex gap-2">
         <RoleBadge role={user.role} m={m} />
         <StatusBadge isActive={user.isActive} m={m} />

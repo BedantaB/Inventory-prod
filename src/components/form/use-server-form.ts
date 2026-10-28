@@ -12,6 +12,8 @@ type Options<Data> = {
   onSuccess?: (result: Extract<ActionResult<Data>, { ok: true }>) => void;
   /** Show the success message as a toast (default true). */
   toastOnSuccess?: boolean;
+  /** Add things that aren't plain inputs (e.g. a resized photo) just before sending. */
+  prepareFormData?: (formData: FormData) => void;
 };
 
 /**
@@ -23,7 +25,7 @@ type Options<Data> = {
  */
 export function useServerForm<Data = undefined>(
   action: (formData: FormData) => Promise<ActionResult<Data> | undefined>,
-  { schema, onSuccess, toastOnSuccess = true }: Options<Data> = {},
+  { schema, onSuccess, toastOnSuccess = true, prepareFormData }: Options<Data> = {},
 ) {
   const t = useT();
   const [pending, startTransition] = useTransition();
@@ -43,7 +45,9 @@ export function useServerForm<Data = undefined>(
   );
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (event.target !== event.currentTarget) return; // a form inside a dialog, not this one
     event.preventDefault();
+    event.stopPropagation();
     const form = event.currentTarget;
     const clientErrors = validate(form, false);
     if (Object.keys(clientErrors).length > 0) {
@@ -52,6 +56,7 @@ export function useServerForm<Data = undefined>(
       return;
     }
     const formData = new FormData(form);
+    prepareFormData?.(formData);
     startTransition(async () => {
       const result = await action(formData);
       if (!result) return; // the action redirected
@@ -69,6 +74,7 @@ export function useServerForm<Data = undefined>(
   };
 
   const onBlur = (event: React.FocusEvent<HTMLFormElement>) => {
+    if (!ownsEvent(event)) return;
     const name = fieldName(event.target);
     if (!name) return;
     touched.current.add(name);
@@ -82,6 +88,7 @@ export function useServerForm<Data = undefined>(
   };
 
   const onChange = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!ownsEvent(event)) return;
     const name = fieldName(event.target);
     if (name && errors[name]) {
       setErrors((prev) => {
@@ -102,6 +109,14 @@ export function useServerForm<Data = undefined>(
     errorFor,
     formProps: { onSubmit, onBlur, onChange, onKeyDown: moveToNextFieldOnEnter, noValidate: true },
   };
+}
+
+/**
+ * React passes events from dialogs (rendered elsewhere in the page) up to the form that contains
+ * them in the component tree. Only react to fields that are really inside this form.
+ */
+function ownsEvent(event: React.SyntheticEvent<HTMLFormElement>): boolean {
+  return event.target instanceof Node && event.currentTarget.contains(event.target);
 }
 
 /** Name of the input/select/textarea an event came from ("" for anything else). */
@@ -126,6 +141,7 @@ const FIELD_SELECTOR =
 export function moveToNextFieldOnEnter(event: React.KeyboardEvent<HTMLFormElement>) {
   const target = event.target as HTMLElement;
   if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+  if (!event.currentTarget.contains(target)) return;
   if (!(target instanceof HTMLInputElement)) return;
   if (["submit", "button", "checkbox", "radio", "file"].includes(target.type)) return;
 

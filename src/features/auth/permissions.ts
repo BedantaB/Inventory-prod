@@ -8,13 +8,15 @@ export type Permission =
   | "manageUsers" // create, edit, deactivate logins
   | "editItemPrice" // change an existing item's usual selling price
   | "archive" // archive items, customers, orders
-  | "viewCost"; // see average cost and below-cost warnings
+  | "viewCost" // see average cost and below-cost warnings
+  | "manageUnits"; // add or change units (pcs, kg, …)
 
 const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
   "manageUsers",
   "editItemPrice",
   "archive",
   "viewCost",
+  "manageUnits",
 ]);
 
 export function can(user: { role: Role }, permission: Permission): boolean {

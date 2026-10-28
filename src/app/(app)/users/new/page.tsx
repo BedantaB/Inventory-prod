@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requireAdminPage } from "@/features/auth/session";
 import { CreateUserForm } from "@/features/users/components/create-user-form";
 import { getMessages } from "@/i18n";
-import { BackToUsers } from "../back-link";
+import { BackLink } from "@/components/back-link";
 
 export const metadata: Metadata = { title: "New staff login" };
 
@@ -13,7 +13,11 @@ export default function NewUserPage() {
   const m = getMessages();
   return (
     <>
-      <PageHeader title={m.users.addTitle} subtitle={m.users.addSubtitle} back={<BackToUsers />} />
+      <PageHeader
+        title={m.users.addTitle}
+        subtitle={m.users.addSubtitle}
+        back={<BackLink href="/users" label={m.users.title} />}
+      />
       <Suspense fallback={<Skeleton className="h-96 max-w-xl" />}>
         <AdminOnlyForm />
       </Suspense>

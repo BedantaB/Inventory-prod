@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatQty, lineTotalPaise, parseQty, qtyFromDb, qtyToDb } from "./qty";
+import { formatQty, lineTotalPaise, parseQty, qtyFromDb, qtyToDb, qtyToInput } from "./qty";
 
 describe("parseQty", () => {
   it("accepts decimals only when the unit allows them", () => {
@@ -42,5 +42,15 @@ describe("lineTotalPaise", () => {
   });
   it("stays exact for very large values", () => {
     expect(lineTotalPaise(999_999_999_000, 100)).toBe(99_999_999_900);
+  });
+});
+
+describe("qtyToInput", () => {
+  it("drops trailing zeros without grouping", () => {
+    expect(qtyToInput(2500)).toBe("2.5");
+    expect(qtyToInput(10_000)).toBe("10");
+    expect(qtyToInput(1_250_000)).toBe("1250");
+    expect(qtyToInput(0)).toBe("0");
+    expect(qtyToInput(105)).toBe("0.105");
   });
 });

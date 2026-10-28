@@ -1,3 +1,6 @@
+"use client";
+
+import { useId } from "react";
 import { Label } from "@/components/ui/label";
 
 export type ControlProps = {
@@ -30,7 +33,9 @@ export function FormField({
   optionalLabel?: string;
   children: (props: ControlProps) => React.ReactNode;
 }) {
-  const id = `field-${name}`;
+  // Unique per form: Next keeps recently visited pages mounted (hidden), so two forms with the
+  // same field names can be in the page at once.
+  const id = `${name}-${useId()}`;
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
