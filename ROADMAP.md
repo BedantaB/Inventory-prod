@@ -30,5 +30,8 @@ Ideas that are **not** part of v1. Each one waits for the owner's go-ahead.
 
 - **Hindi UI**: add `hi` messages next to `src/i18n/en`.
 - **Reports export**: download items, stock and orders as CSV or Excel.
+- **Excel (.xlsx) import**: import directly without saving as CSV first.
+- **Bulk price update**: change MRP or selling prices for many items at once (for example
+  when DOMS sends a new price list).
 - **Activity log**: who changed what, for item edits and archiving.
 - **Offline mode** for weak godown signal.

@@ -5,30 +5,59 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/features/auth/session";
 import { ItemForm } from "@/features/items/components/item-form";
-import { listCategories, listUnits } from "@/features/items/queries";
-import { getMessages } from "@/i18n";
+import { itemDisplayName } from "@/features/items/data";
+import { getItem, listBrands, listCategories, listUnits } from "@/features/items/queries";
+import { format, getMessages } from "@/i18n";
+import { firstParam } from "@/lib/list-params";
 
 export const metadata: Metadata = { title: "New item" };
 
-export default function NewItemPage() {
-  const m = getMessages();
+export default function NewItemPage({ searchParams }: PageProps<"/items/new">) {
   return (
-    <>
-      <PageHeader
-        title={m.items.addTitle}
-        subtitle={m.items.addSubtitle}
-        back={<BackLink href="/items" label={m.items.title} />}
-      />
-      <Suspense fallback={<Skeleton className="h-[32rem] max-w-2xl" />}>
-        <NewItemForm />
-      </Suspense>
-    </>
+    <Suspense fallback={<Skeleton className="h-[40rem] max-w-2xl" />}>
+      <NewItem searchParams={searchParams} />
+    </Suspense>
   );
 }
 
-async function NewItemForm() {
+async function NewItem({ searchParams }: Pick<PageProps<"/items/new">, "searchParams">) {
+  const m = getMessages();
   await requireUser();
-  const [categories, units] = await Promise.all([listCategories(), listUnits()]);
-  // Anyone may set the price on a new item; only the owner may change it afterwards.
-  return <ItemForm categories={categories} units={units} canEditPrice />;
+  const copyId = firstParam((await searchParams).copy);
+  const [categories, brands, units, copyFrom] = await Promise.all([
+    listCategories(),
+    listBrands(),
+    listUnits(),
+    copyId ? getItem(copyId) : null,
+  ]);
+
+  return (
+    <>
+      <PageHeader
+        title={
+          copyFrom ? format(m.items.addVariantTitle, { name: copyFrom.name }) : m.items.addTitle
+        }
+        subtitle={
+          copyFrom
+            ? format(m.items.addVariantSubtitle, { name: itemDisplayName(copyFrom) })
+            : m.items.addSubtitle
+        }
+        back={
+          copyFrom ? (
+            <BackLink href={`/items/${copyFrom.id}`} label={itemDisplayName(copyFrom)} />
+          ) : (
+            <BackLink href="/items" label={m.items.title} />
+          )
+        }
+      />
+      {/* Anyone may set prices on a new item; only the owner may change them afterwards. */}
+      <ItemForm
+        copyFrom={copyFrom ?? undefined}
+        categories={categories}
+        brands={brands}
+        units={units}
+        canEditPrice
+      />
+    </>
+  );
 }

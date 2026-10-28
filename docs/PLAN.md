@@ -73,27 +73,43 @@ See `src/db/schema/*` and `src/db/migrations/`. Tables:
 
 ## Phases (stop after each one for review; each ends with `pnpm check` and a commit)
 
-0. **Setup**
-   - Scaffold, configs, schema and migrations (triggers, RLS)
-   - Seed script, CLAUDE.md, README, ROADMAP
-1. **Login and app shell**
-   - Login, logout, forgot/reset password, `proxy.ts`, role helpers
-   - Admin user management
-   - App shell: bottom navigation on mobile, sidebar on desktop
-   - i18n helper, toasts, empty states, confirm dialogs
-2. **Items and customers**
-   - Items: lists with search, filters, sort and pagination; forms; photos; archive
-   - Units list
-   - Customer page with order history
-3. **Add Stock**
-   - Form with multiple lines
-   - Stock history on the item page
-4. **Cart, checkout and orders**
-   - Drafts, customer picker with inline add, cart, checkout with shortages list
-   - Confirmation screen and print view
-   - Orders list and order page
-   - Sample orders added to the seed
-5. **Dashboard and finishing**
-   - Dashboard
-   - Polish pass, Playwright flows
-   - DEPLOYMENT.md
+**Phase 0: Setup**
+
+- Scaffold, configs, schema and migrations (triggers, RLS)
+- Seed script, CLAUDE.md, README, ROADMAP
+
+**Phase 1: Login and app shell**
+
+- Login, logout, forgot/reset password, `proxy.ts`, role helpers
+- Admin user management
+- App shell: bottom navigation on mobile, sidebar on desktop
+- i18n helper, toasts, empty states, confirm dialogs
+
+**Phase 2: Items and customers**
+
+- Items: lists with search, filters, sort and pagination; forms; photos; archive
+- Units list
+- Customer page with order history
+
+**Phase 2.5: Stationery changes**
+
+- MRP, brand, colour/variant, wider search
+- DOMS sample data, CSV import
+
+**Phase 3: Add Stock**
+
+- Form with multiple lines
+- Stock history on the item page
+
+**Phase 4: Cart, checkout and orders**
+
+- Drafts, customer picker with inline add, cart, checkout with shortages list
+- Confirmation screen and print view
+- Orders list and order page
+- Sample orders added to the seed
+
+**Phase 5: Dashboard and finishing**
+
+- Dashboard
+- Polish pass, Playwright flows
+- DEPLOYMENT.md

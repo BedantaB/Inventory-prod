@@ -1,4 +1,4 @@
-import { HistoryIcon, PencilIcon } from "lucide-react";
+import { CopyPlusIcon, HistoryIcon, PencilIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -14,6 +14,7 @@ import { requireUser } from "@/features/auth/session";
 import { ItemArchiveAction } from "@/features/items/components/item-archive-action";
 import { ItemPhoto } from "@/features/items/components/item-photo";
 import { StockBadge } from "@/features/items/components/stock-badge";
+import { itemDisplayName } from "@/features/items/data";
 import { getItem } from "@/features/items/queries";
 import { format, getMessages } from "@/i18n";
 import { formatDate } from "@/lib/dates";
@@ -38,11 +39,12 @@ async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">)
   const showCost = can(user, "viewCost");
   const unit = item.unitName;
 
+  const money = (paise: number | null) => (paise != null ? formatINR(paise) : m.items.noPrice);
   const facts: [string, string][] = [
-    [
-      m.items.sellingPrice,
-      item.sellingPricePaise != null ? formatINR(item.sellingPricePaise) : m.items.noPrice,
-    ],
+    [m.items.mrp, money(item.mrpPaise)],
+    [m.items.sellingPrice, money(item.sellingPricePaise)],
+    [m.items.variant, item.variant ?? "—"],
+    [m.items.brand, item.brandName ?? m.items.noBrand],
     [m.items.unit, unit],
     [m.items.packSize, item.packSize ?? "—"],
     [m.items.category, item.categoryName ?? m.items.noCategory],
@@ -53,7 +55,7 @@ async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">)
   return (
     <>
       <PageHeader
-        title={item.name}
+        title={itemDisplayName(item)}
         subtitle={format(m.items.addedOn, { date: formatDate(item.createdAt) })}
         back={<BackLink href="/items" label={m.items.title} />}
         action={
@@ -79,7 +81,7 @@ async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">)
           <CardContent className="flex flex-col gap-5 sm:flex-row">
             <ItemPhoto
               path={item.photoPath}
-              alt={item.name}
+              alt={itemDisplayName(item)}
               size="full"
               className="size-40 self-center sm:self-start"
             />
@@ -134,11 +136,23 @@ async function ItemDetails({ params }: Pick<PageProps<"/items/[id]">, "params">)
           </CardContent>
         </Card>
 
-        {can(user, "archive") && (
-          <div>
-            <ItemArchiveAction id={item.id} name={item.name} archived={Boolean(item.archivedAt)} />
-          </div>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          {!item.archivedAt && (
+            <Button size="lg" variant="outline" asChild>
+              <Link href={`/items/new?copy=${item.id}`}>
+                <CopyPlusIcon aria-hidden />
+                {m.items.addVariant}
+              </Link>
+            </Button>
+          )}
+          {can(user, "archive") && (
+            <ItemArchiveAction
+              id={item.id}
+              name={itemDisplayName(item)}
+              archived={Boolean(item.archivedAt)}
+            />
+          )}
+        </div>
       </div>
     </>
   );

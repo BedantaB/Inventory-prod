@@ -7,7 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { ItemForm } from "@/features/items/components/item-form";
-import { getItem, listCategories, listUnits } from "@/features/items/queries";
+import { itemDisplayName } from "@/features/items/data";
+import { getItem, listBrands, listCategories, listUnits } from "@/features/items/queries";
 import { getMessages } from "@/i18n";
 
 export const metadata: Metadata = { title: "Edit item" };
@@ -24,7 +25,12 @@ async function EditItem({ params }: Pick<PageProps<"/items/[id]/edit">, "params"
   const m = getMessages();
   const user = await requireUser();
   const { id } = await params;
-  const [item, categories, units] = await Promise.all([getItem(id), listCategories(), listUnits()]);
+  const [item, categories, brands, units] = await Promise.all([
+    getItem(id),
+    listCategories(),
+    listBrands(),
+    listUnits(),
+  ]);
   if (!item) notFound();
   if (item.archivedAt) redirect(`/items/${item.id}`);
 
@@ -32,12 +38,13 @@ async function EditItem({ params }: Pick<PageProps<"/items/[id]/edit">, "params"
     <>
       <PageHeader
         title={m.items.editTitle}
-        subtitle={item.name}
-        back={<BackLink href={`/items/${item.id}`} label={item.name} />}
+        subtitle={itemDisplayName(item)}
+        back={<BackLink href={`/items/${item.id}`} label={itemDisplayName(item)} />}
       />
       <ItemForm
         item={item}
         categories={categories}
+        brands={brands}
         units={units}
         canEditPrice={can(user, "editItemPrice")}
       />

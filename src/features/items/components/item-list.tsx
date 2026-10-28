@@ -6,7 +6,7 @@ import type { Messages } from "@/i18n";
 import { formatINR } from "@/lib/money";
 import { formatQty } from "@/lib/qty";
 import { cn } from "@/lib/utils";
-import type { ItemView } from "../data";
+import { itemDisplayName, type ItemView } from "../data";
 import { ItemPhoto } from "./item-photo";
 import { StockBadge } from "./stock-badge";
 
@@ -52,9 +52,11 @@ export function ItemList({
           >
             <ItemPhoto path={item.photoPath} alt="" className="size-12 sm:size-14" />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-base font-semibold sm:text-lg">{item.name}</span>
+              <span className="truncate text-base font-semibold sm:text-lg">
+                {itemDisplayName(item)}
+              </span>
               <span className="truncate text-sm text-muted-foreground">
-                {[item.sku, item.packSize, item.categoryName].filter(Boolean).join(" · ")}
+                {[item.packSize, item.brandName, item.sku].filter(Boolean).join(" · ")}
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-1 text-right">

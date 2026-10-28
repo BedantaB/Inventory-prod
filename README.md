@@ -84,6 +84,13 @@ The seed script creates three logins:
 | username `ramesh`                             | `SEED_STAFF_PASSWORD` | Staff |
 | username `sunita`                             | `SEED_STAFF_PASSWORD` | Staff |
 
+The sample data is the DOMS stationery price list:
+
+- 129 items, plus colour versions, 150 in total.
+- MRP comes from the list. Selling price is 85% of MRP and cost is 70% of MRP; both are
+  made-up numbers.
+- 15 customers in Tripura.
+
 Run `pnpm db:seed --reset` at any time to wipe the items, customers, stock and orders and
 reload the sample data. Logins are kept.
 

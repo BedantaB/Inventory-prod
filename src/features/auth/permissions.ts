@@ -9,7 +9,8 @@ export type Permission =
   | "editItemPrice" // change an existing item's usual selling price
   | "archive" // archive items, customers, orders
   | "viewCost" // see average cost and below-cost warnings
-  | "manageUnits"; // add or change units (pcs, kg, …)
+  | "manageUnits" // add or change units (pcs, kg, …)
+  | "importItems"; // add many items at once from a spreadsheet
 
 const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
   "manageUsers",
@@ -17,6 +18,7 @@ const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
   "archive",
   "viewCost",
   "manageUnits",
+  "importItems",
 ]);
 
 export function can(user: { role: Role }, permission: Permission): boolean {

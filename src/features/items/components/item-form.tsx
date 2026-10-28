@@ -2,7 +2,7 @@
 
 import { SaveIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormField } from "@/components/form/form-field";
 import { MoneyInput } from "@/components/form/money-input";
 import { SubmitButton } from "@/components/form/submit-button";
@@ -12,23 +12,36 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useMessages } from "@/i18n/provider";
 import { paiseToInput } from "@/lib/money";
 import { qtyToInput } from "@/lib/qty";
-import { createItemAction, updateItemAction } from "../actions";
+import {
+  createBrandAction,
+  createCategoryAction,
+  createItemAction,
+  updateItemAction,
+} from "../actions";
 import type { ItemView } from "../data";
 import { itemSchema } from "../schemas";
-import { CategoryField } from "./category-field";
+import { LookupField } from "./lookup-field";
 import { PhotoPicker, type PickedPhoto } from "./photo-picker";
 
 type Unit = { id: string; name: string; label: string; allowsDecimal: boolean };
+type Option = { id: string; name: string };
+
+const money = (paise: number | null | undefined) => (paise != null ? paiseToInput(paise) : "");
 
 export function ItemForm({
   item,
+  copyFrom,
   categories,
+  brands,
   units,
   canEditPrice,
 }: {
-  /** Absent when creating a new item. */
+  /** The item being edited. Absent when creating. */
   item?: ItemView;
-  categories: { id: string; name: string }[];
+  /** "Add another colour": a new item that starts as a copy of this one. */
+  copyFrom?: ItemView;
+  categories: Option[];
+  brands: Option[];
   units: Unit[];
   canEditPrice: boolean;
 }) {
@@ -36,10 +49,20 @@ export function ItemForm({
   const router = useRouter();
   const photo = useRef<PickedPhoto>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
-  const defaultUnitId = item?.unitId ?? units.find((u) => u.name === "pcs")?.id ?? units[0]?.id;
+  const base = item ?? copyFrom;
+  const defaultUnitId = base?.unitId ?? units.find((u) => u.name === "pcs")?.id ?? units[0]?.id;
   const [unitId, setUnitId] = useState(defaultUnitId);
   const allowsDecimal = units.find((u) => u.id === unitId)?.allowsDecimal ?? false;
   const priceLocked = Boolean(item) && !canEditPrice;
+
+  // "Add another colour": put the cursor in the colour box. (autoFocus doesn't fire after an
+  // in-app navigation, so focus it once the page is shown.)
+  const variantRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!copyFrom) return;
+    const frame = requestAnimationFrame(() => variantRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [copyFrom]);
 
   const action = item ? updateItemAction.bind(null, item.id) : createItemAction;
   const { pending, errorFor, formProps } = useServerForm<{ id: string } | undefined>(action, {
@@ -61,17 +84,37 @@ export function ItemForm({
 
   return (
     <form {...formProps} className="flex max-w-2xl flex-col gap-5">
-      <FormField name="name" label={m.items.name} error={errorFor("name")} required>
-        {(p) => (
-          <Input
-            {...p}
-            defaultValue={item?.name}
-            placeholder={m.items.namePlaceholder}
-            autoComplete="off"
-            autoFocus={!item}
-          />
-        )}
-      </FormField>
+      <div className="grid gap-5 sm:grid-cols-[2fr_1fr]">
+        <FormField name="name" label={m.items.name} error={errorFor("name")} required>
+          {(p) => (
+            <Input
+              {...p}
+              defaultValue={base?.name}
+              placeholder={m.items.namePlaceholder}
+              autoComplete="off"
+              autoFocus={!base}
+            />
+          )}
+        </FormField>
+        <FormField
+          name="variant"
+          label={m.items.variant}
+          optionalLabel={m.common.optional}
+          error={errorFor("variant")}
+        >
+          {(p) => (
+            <Input
+              {...p}
+              // A copy needs a new colour, so it starts empty.
+              defaultValue={item?.variant ?? ""}
+              placeholder={m.items.variantPlaceholder}
+              autoComplete="off"
+              ref={variantRef}
+            />
+          )}
+        </FormField>
+      </div>
+      <p className="-mt-3 text-sm text-muted-foreground">{m.items.variantHint}</p>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <FormField
@@ -100,20 +143,63 @@ export function ItemForm({
           {(p) => (
             <Input
               {...p}
-              defaultValue={item?.packSize ?? ""}
+              defaultValue={base?.packSize ?? ""}
               placeholder={m.items.packSizePlaceholder}
             />
           )}
         </FormField>
       </div>
 
-      <CategoryField
-        categories={categories}
-        defaultValue={item?.categoryId ?? null}
-        error={errorFor("categoryId")}
-      />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <LookupField
+          name="brandId"
+          label={m.items.brand}
+          emptyLabel={m.items.noBrand}
+          options={brands}
+          defaultValue={base?.brandId ?? null}
+          error={errorFor("brandId")}
+          create={createBrandAction}
+          text={{
+            add: m.items.newBrand,
+            title: m.items.newBrandTitle,
+            fieldLabel: m.items.newBrandName,
+            placeholder: m.items.newBrandPlaceholder,
+          }}
+        />
+        <LookupField
+          name="categoryId"
+          label={m.items.category}
+          emptyLabel={m.items.noCategory}
+          options={categories}
+          defaultValue={base?.categoryId ?? null}
+          error={errorFor("categoryId")}
+          create={createCategoryAction}
+          text={{
+            add: m.items.newCategory,
+            title: m.items.newCategoryTitle,
+            fieldLabel: m.items.newCategoryName,
+            placeholder: m.items.newCategoryPlaceholder,
+          }}
+        />
+      </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
+        <FormField
+          name="mrp"
+          label={m.items.mrp}
+          optionalLabel={m.common.optional}
+          hint={priceLocked ? m.items.priceOwnerOnly : m.items.mrpHint}
+          error={errorFor("mrp")}
+        >
+          {(p) => (
+            <MoneyInput
+              {...p}
+              defaultValue={money(base?.mrpPaise)}
+              placeholder="0.00"
+              disabled={priceLocked}
+            />
+          )}
+        </FormField>
         <FormField
           name="sellingPrice"
           label={m.items.sellingPrice}
@@ -124,14 +210,15 @@ export function ItemForm({
           {(p) => (
             <MoneyInput
               {...p}
-              defaultValue={
-                item?.sellingPricePaise != null ? paiseToInput(item.sellingPricePaise) : ""
-              }
+              defaultValue={money(base?.sellingPricePaise)}
               placeholder="0.00"
               disabled={priceLocked}
             />
           )}
         </FormField>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2">
         <FormField
           name="lowStockThreshold"
           label={m.items.lowStock}
@@ -141,31 +228,31 @@ export function ItemForm({
           {(p) => (
             <Input
               {...p}
-              defaultValue={item ? qtyToInput(item.lowStockMilli) : "0"}
+              defaultValue={base ? qtyToInput(base.lowStockMilli) : "0"}
               inputMode={allowsDecimal ? "decimal" : "numeric"}
               autoComplete="off"
             />
           )}
         </FormField>
+        <FormField
+          name="sku"
+          label={m.items.sku}
+          optionalLabel={m.common.optional}
+          hint={m.items.skuHint}
+          error={errorFor("sku")}
+        >
+          {(p) => (
+            <Input
+              {...p}
+              // A copy gets its own SKU.
+              defaultValue={item?.sku ?? ""}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          )}
+        </FormField>
       </div>
-
-      <FormField
-        name="sku"
-        label={m.items.sku}
-        optionalLabel={m.common.optional}
-        hint={m.items.skuHint}
-        error={errorFor("sku")}
-      >
-        {(p) => (
-          <Input
-            {...p}
-            defaultValue={item?.sku ?? ""}
-            autoCapitalize="characters"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        )}
-      </FormField>
 
       <PhotoPicker
         existingPath={item?.photoPath ?? null}

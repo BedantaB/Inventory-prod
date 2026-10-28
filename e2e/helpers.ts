@@ -78,6 +78,7 @@ export async function cleanupTestData() {
     // Only rows with no stock history or orders can be removed; tests don't create any.
     await sql`DELETE FROM items WHERE name LIKE 'E2E %'`;
     await sql`DELETE FROM categories WHERE name LIKE 'E2E %'`;
+    await sql`DELETE FROM brands WHERE name LIKE 'E2E %'`;
     await sql`DELETE FROM vendors WHERE business_name LIKE 'E2E %'`;
   } finally {
     await sql.end();

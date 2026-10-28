@@ -13,21 +13,27 @@ function messages(result: {
 describe("itemSchema", () => {
   it("turns form strings into clean values", () => {
     const result = itemSchema.parse({
-      name: "  Toor Dal ",
-      sku: " dal-toor ",
+      name: "  Permanent Marker ",
+      variant: " Blue ",
+      sku: " doms-002-blu ",
       categoryId: "",
+      brandId: "",
       unitId,
       packSize: "",
-      sellingPrice: "1,650.5",
+      mrp: "1,650.5",
+      sellingPrice: "1,400",
       lowStockThreshold: "2.5",
     });
     expect(result).toEqual({
-      name: "Toor Dal",
-      sku: "DAL-TOOR",
+      name: "Permanent Marker",
+      variant: "Blue",
+      sku: "DOMS-002-BLU",
       categoryId: null,
+      brandId: null,
       unitId,
       packSize: null,
-      sellingPrice: 165050,
+      mrp: 165050,
+      sellingPrice: 140000,
       lowStockThreshold: 2500,
       removePhoto: false,
     });
@@ -55,6 +61,14 @@ describe("itemSchema", () => {
       ["sellingPrice", "items.invalidPrice"],
       ["lowStockThreshold", "items.invalidQuantity"],
     ]);
+  });
+
+  it("doesn't allow a selling price above the MRP", () => {
+    const result = itemSchema.safeParse({ name: "X", unitId, mrp: "20", sellingPrice: "20.50" });
+    expect(messages(result)).toEqual([["sellingPrice", "items.priceAboveMrp"]]);
+    expect(itemSchema.safeParse({ name: "X", unitId, mrp: "20", sellingPrice: "20" }).success).toBe(
+      true,
+    );
   });
 
   it("caps the price at ₹1 crore", () => {

@@ -8,9 +8,24 @@ import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { failure, fieldFailure, parseForm, success, type ActionResult } from "@/lib/forms";
 import { formatQty, QTY_SCALE } from "@/lib/qty";
+import { getMessages } from "@/i18n";
 import * as data from "./data";
+import { checkImport, type ImportProblem } from "./import";
 import { checkPhoto, deleteItemPhoto, photoFilesFrom, uploadItemPhoto } from "./photos";
 import { categorySchema, itemSchema, unitSchema, type ItemInput } from "./schemas";
+
+function fieldsFrom(input: ItemInput) {
+  return {
+    name: input.name,
+    variant: input.variant,
+    sku: input.sku,
+    categoryId: input.categoryId,
+    brandId: input.brandId,
+    unitId: input.unitId,
+    packSize: input.packSize,
+    lowStockMilli: input.lowStockThreshold,
+  };
+}
 
 const isUuid = (id: string) => z.uuid().safeParse(id).success;
 
@@ -66,14 +81,10 @@ export async function createItemAction(formData: FormData): Promise<ActionResult
     const item = await data.createItem(
       getDb(),
       {
-        name: input.name,
-        sku: input.sku,
-        categoryId: input.categoryId,
-        unitId: input.unitId,
-        packSize: input.packSize,
-        // Anyone may set the price when creating; only the owner may change it later.
+        ...fieldsFrom(input),
+        // Anyone may set prices when creating; only the owner may change them later.
+        mrpPaise: input.mrp,
         sellingPricePaise: input.sellingPrice,
-        lowStockMilli: input.lowStockThreshold,
         photoPath: photo.path,
       },
       actor.id,
@@ -84,9 +95,8 @@ export async function createItemAction(formData: FormData): Promise<ActionResult
     await deleteItemPhoto(photo.path);
     if (getPgErrorCode(error) === DB_ERROR.uniqueViolation)
       return fieldFailure("sku", "items.skuTaken");
-    if (getPgErrorCode(error) === DB_ERROR.foreignKeyViolation) {
-      return fieldFailure("categoryId", "validation.invalidChoice");
-    }
+    if (getPgErrorCode(error) === DB_ERROR.foreignKeyViolation)
+      return failure("validation.fixErrors");
     throw error;
   }
 }
@@ -121,13 +131,9 @@ export async function updateItemAction(itemId: string, formData: FormData): Prom
 
   try {
     await data.updateItem(db, itemId, {
-      name: input.name,
-      sku: input.sku,
-      categoryId: input.categoryId,
-      unitId: input.unitId,
-      packSize: input.packSize,
-      lowStockMilli: input.lowStockThreshold,
+      ...fieldsFrom(input),
       sellingPricePaise: canEditPrice ? input.sellingPrice : undefined,
+      mrpPaise: canEditPrice ? input.mrp : undefined,
       photoPath,
     });
   } catch (error) {
@@ -171,6 +177,18 @@ export async function createCategoryAction(
       );
 }
 
+export async function createBrandAction(
+  formData: FormData,
+): Promise<ActionResult<{ id: string; name: string }>> {
+  const actor = await requireUser();
+  const parsed = parseForm(categorySchema, formData);
+  if (!parsed.ok) return parsed.result;
+  const brand = await data.findOrCreateBrand(getDb(), parsed.data.name, actor.id);
+  return brand.existed
+    ? success("items.brandExists", undefined, { id: brand.id, name: brand.name })
+    : success("items.brandCreated", { name: brand.name }, { id: brand.id, name: brand.name });
+}
+
 export async function createUnitAction(formData: FormData): Promise<ActionResult> {
   const actor = await requireUser();
   if (!can(actor, "manageUnits")) return failure("errors.adminOnly");
@@ -205,4 +223,102 @@ export async function updateUnitAction(unitId: string, formData: FormData): Prom
   revalidatePath("/items/units");
   revalidateItems();
   return success("units.updated");
+}
+
+// ---- Import from spreadsheet (owner only) ----
+
+const MAX_IMPORT_BYTES = 1_000_000;
+
+export type ImportPreview = {
+  count: number;
+  withStock: number;
+  newBrands: number;
+  newCategories: number;
+  sample: {
+    row: number;
+    name: string;
+    variant: string | null;
+    packSize: string | null;
+    mrpPaise: number | null;
+  }[];
+  problems: ImportProblem[];
+  totalProblems: number;
+};
+
+async function readImport(formData: FormData) {
+  const csv = formData.get("csv");
+  if (typeof csv !== "string" || csv.length === 0) return { error: "import.empty" as const };
+  if (csv.length > MAX_IMPORT_BYTES) return { error: "import.tooBig" as const };
+  const db = getDb();
+  const context = await data.importContext(db);
+  return { db, csv, check: checkImport(csv, context) };
+}
+
+/** Step 1: check the file and show what would happen. Nothing is saved. */
+export async function checkImportAction(formData: FormData): Promise<ActionResult<ImportPreview>> {
+  const actor = await requireUser();
+  if (!can(actor, "importItems")) return failure("errors.adminOnly");
+  const read = await readImport(formData);
+  if ("error" in read) return failure(read.error!);
+  const { db, check } = read;
+
+  const [brands, categories] = await Promise.all([data.listBrands(db), data.listCategories(db)]);
+  const countNew = (names: (string | null)[], existing: { name: string }[]) => {
+    const known = new Set(existing.map((e) => e.name.toLowerCase()));
+    return new Set(
+      names
+        .filter((n): n is string => !!n && !known.has(n.toLowerCase()))
+        .map((n) => n.toLowerCase()),
+    ).size;
+  };
+
+  return success(undefined, undefined, {
+    count: check.rows.length,
+    withStock: check.rows.filter((r) => r.openingStockMilli > 0).length,
+    newBrands: countNew(
+      check.rows.map((r) => r.brand),
+      brands,
+    ),
+    newCategories: countNew(
+      check.rows.map((r) => r.category),
+      categories,
+    ),
+    sample: check.rows.slice(0, 10).map(({ row, name, variant, packSize, mrpPaise }) => ({
+      row,
+      name,
+      variant,
+      packSize,
+      mrpPaise,
+    })),
+    problems: check.problems.slice(0, 50),
+    totalProblems: check.problems.length,
+  });
+}
+
+/** Step 2: check again (the server never trusts the earlier answer) and add everything. */
+export async function runImportAction(
+  formData: FormData,
+): Promise<ActionResult<{ count: number }>> {
+  const actor = await requireUser();
+  if (!can(actor, "importItems")) return failure("errors.adminOnly");
+  const read = await readImport(formData);
+  if ("error" in read) return failure(read.error!);
+  const { db, check } = read;
+  if (check.problems.length > 0 || check.rows.length === 0)
+    return failure("import.changedSinceCheck");
+
+  try {
+    const result = await data.importItems(
+      db,
+      check.rows,
+      actor.id,
+      getMessages().import.openingStockNote,
+    );
+    revalidateItems();
+    return success("import.done", { count: result.items }, { count: result.items });
+  } catch (error) {
+    if (getPgErrorCode(error) === DB_ERROR.uniqueViolation)
+      return failure("import.changedSinceCheck");
+    throw error;
+  }
 }

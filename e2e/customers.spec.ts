@@ -9,13 +9,13 @@ test("staff find a customer by phone number and can call them", async ({ page })
   await login(page, "sunita", creds.staffPassword);
   await expect(page.getByRole("heading", { name: /^Namaste/ })).toBeVisible();
   await page.goto("/customers");
-  await page.getByRole("searchbox").fill("98290 12345");
-  await expect(page.getByRole("link", { name: /^Sharma Kirana Store/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Call Sharma Kirana Store" })).toHaveAttribute(
+  await page.getByRole("searchbox").fill("94360 12345");
+  await expect(page.getByRole("link", { name: /^Sarkar Book Stall/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Call Sarkar Book Stall" })).toHaveAttribute(
     "href",
-    "tel:+919829012345",
+    "tel:+919436012345",
   );
-  await page.getByRole("link", { name: /^Sharma Kirana Store/ }).click();
+  await page.getByRole("link", { name: /^Sarkar Book Stall/ }).click();
   await expect(page.getByText("No orders yet")).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive customer" })).toHaveCount(0);
 });

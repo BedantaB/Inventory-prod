@@ -22,16 +22,19 @@ describe("seed data", () => {
     const summary = await seedBusinessData(db, userIds);
     expect(summary.items).toBe(seedItems.length);
 
-    const [basmati] = await db
+    expect(summary.items).toBe(150); // 129 list rows + 21 extra colours
+
+    const [glueStick] = await db
       .select()
       .from(schema.items)
-      .where(eq(schema.items.sku, "RICE-BAS-25"));
-    expect(basmati.currentStock).toBe("70.000");
-    // (40 × 2150 + 30 × 2190) / 70 = 2167.142… → ₹2,167.14
-    expect(basmati.avgCostPaise).toBe(216_714);
+      .where(eq(schema.items.sku, "DOMS-008"));
+    expect(glueStick.currentStock).toBe("300.000");
+    // 200 @ ₹17.50 + 100 @ ₹18.00 → ₹17.666… → ₹17.67
+    expect(glueStick.avgCostPaise).toBe(1_767);
+    expect(glueStick.mrpPaise).toBe(2_500);
 
-    const [elaichi] = await db.select().from(schema.items).where(eq(schema.items.sku, "ELAICHI"));
-    expect(elaichi.currentStock).toBe("0.000");
+    const [superio] = await db.select().from(schema.items).where(eq(schema.items.sku, "DOMS-022"));
+    expect(superio.currentStock).toBe("0.000");
   });
 
   it("can be wiped and loaded again", async () => {

@@ -1,27 +1,39 @@
-/** Sample data for a grocery/FMCG wholesaler. Money here is in RUPEES for readability. */
+/**
+ * Sample data for a stationery wholesaler (DOMS price list from PRANTIK, Agartala).
+ * Money here is in RUPEES for readability.
+ *
+ * MRP comes from the price list. Sample prices: usual selling price = 85% of MRP and
+ * cost price = 70% of MRP (second purchases at 72%). These are made-up numbers for trying
+ * the app — replace them with real ones.
+ */
 
 export const seedCategories = [
-  "Rice & Grains",
-  "Dal & Pulses",
-  "Atta & Flour",
-  "Edible Oil & Ghee",
-  "Masala & Spices",
-  "Sugar, Salt & Gur",
-  "Tea & Coffee",
-  "Biscuits & Namkeen",
-  "Soap & Detergent",
-  "Household",
+  "Markers & Ink",
+  "Glue & Gum",
+  "Pencils",
+  "Colour Pencils & Crayons",
+  "Paints & Pastels",
+  "Brushes",
+  "Geometry & Scales",
+  "Art Kits & Clay",
+  "Pens",
+  "Erasers & Sharpeners",
+  "Highlighters & Correction",
+  "Chalk & Boards",
+  "Notebooks & Sketch Books",
 ] as const;
 
+export const seedBrands = ["DOMS"] as const;
+
 type Category = (typeof seedCategories)[number];
-type Unit = "pcs" | "box" | "kg" | "litre" | "dozen" | "bundle";
+type Unit = "pcs" | "box" | "set" | "pkt" | "jar";
 
 /** Stock-in bills, oldest first. `daysAgo` backdates them so history and dashboard look lived-in. */
 export const seedStockEntries = [
-  { key: "opening", reference: "INV-4521", note: "Opening stock", daysAgo: 28, by: "owner" },
-  { key: "second", reference: "BILL-8834", note: "Agarwal Wholesale, Delhi", daysAgo: 15, by: "ramesh" },
-  { key: "third", reference: "GR-1102", note: "Local mandi purchase", daysAgo: 7, by: "sunita" },
-  { key: "latest", reference: "BILL-9015", note: "Agarwal Wholesale, Delhi", daysAgo: 2, by: "ramesh" },
+  { key: "opening", reference: "OPENING", note: "Opening stock", daysAgo: 28, by: "owner" },
+  { key: "second", reference: "DOMS-INV-88341", note: "DOMS distributor, Kolkata", daysAgo: 15, by: "ramesh" },
+  { key: "third", reference: "GR-1102", note: "Local purchase", daysAgo: 7, by: "sunita" },
+  { key: "latest", reference: "DOMS-INV-90215", note: "DOMS distributor, Kolkata", daysAgo: 2, by: "ramesh" },
 ] as const;
 
 type EntryKey = (typeof seedStockEntries)[number]["key"];
@@ -29,108 +41,248 @@ type EntryKey = (typeof seedStockEntries)[number]["key"];
 export type SeedItem = {
   sku: string;
   name: string;
+  variant?: string;
+  brand: (typeof seedBrands)[number];
   category: Category;
   unit: Unit;
   packSize?: string;
+  mrp: number;
   sell: number;
   lowStock: number;
   /** [stock entry, quantity, cost per unit in ₹] */
   buys: [EntryKey, number, number][];
 };
 
-export const seedItems: SeedItem[] = [
-  // Rice & Grains
-  { sku: "RICE-BAS-25", name: "Basmati Rice Premium", category: "Rice & Grains", unit: "pcs", packSize: "25 kg bag", sell: 2450, lowStock: 10, buys: [["opening", 40, 2150], ["second", 30, 2190]] },
-  { sku: "RICE-SON-26", name: "Sona Masoori Rice", category: "Rice & Grains", unit: "pcs", packSize: "26 kg bag", sell: 1550, lowStock: 10, buys: [["opening", 35, 1380]] },
-  { sku: "RICE-KOL", name: "Kolam Rice (loose)", category: "Rice & Grains", unit: "kg", sell: 52, lowStock: 100, buys: [["opening", 500, 46], ["third", 250, 47.5]] },
-  { sku: "POHA-1", name: "Poha Thick 1 kg", category: "Rice & Grains", unit: "pcs", packSize: "1 kg packet", sell: 62, lowStock: 30, buys: [["opening", 120, 54]] },
-  { sku: "DALIA-500", name: "Daliya 500 g", category: "Rice & Grains", unit: "pcs", packSize: "500 g packet", sell: 38, lowStock: 24, buys: [["opening", 18, 32]] },
+// [list no, name, pack size, MRP, unit, category, colours/variants]
+type Row = [number, string, string | null, number, Unit, Category, string[]?];
 
-  // Dal & Pulses (sold loose by kg)
-  { sku: "DAL-TOOR", name: "Toor Dal", category: "Dal & Pulses", unit: "kg", sell: 165, lowStock: 50, buys: [["opening", 300, 148], ["second", 200, 152.5]] },
-  { sku: "DAL-CHANA", name: "Chana Dal", category: "Dal & Pulses", unit: "kg", sell: 92, lowStock: 50, buys: [["opening", 250, 82]] },
-  { sku: "DAL-MOONG", name: "Moong Dal (Yellow)", category: "Dal & Pulses", unit: "kg", sell: 125, lowStock: 40, buys: [["opening", 180, 110], ["latest", 100, 114]] },
-  { sku: "DAL-MASOOR", name: "Masoor Dal", category: "Dal & Pulses", unit: "kg", sell: 98, lowStock: 40, buys: [["opening", 150, 86]] },
-  { sku: "DAL-URAD", name: "Urad Dal (Dhuli)", category: "Dal & Pulses", unit: "kg", sell: 135, lowStock: 40, buys: [["opening", 32.5, 120]] },
-  { sku: "KABULI", name: "Kabuli Chana", category: "Dal & Pulses", unit: "kg", sell: 140, lowStock: 30, buys: [["opening", 120, 124]] },
-  { sku: "RAJMA", name: "Rajma Chitra", category: "Dal & Pulses", unit: "kg", sell: 150, lowStock: 30, buys: [["second", 90, 132]] },
+const C = {
+  markers: "Markers & Ink",
+  glue: "Glue & Gum",
+  pencils: "Pencils",
+  colourPencils: "Colour Pencils & Crayons",
+  paints: "Paints & Pastels",
+  brushes: "Brushes",
+  geometry: "Geometry & Scales",
+  art: "Art Kits & Clay",
+  pens: "Pens",
+  erasers: "Erasers & Sharpeners",
+  highlight: "Highlighters & Correction",
+  chalk: "Chalk & Boards",
+  books: "Notebooks & Sketch Books",
+} as const satisfies Record<string, Category>;
 
-  // Atta & Flour
-  { sku: "ATTA-10", name: "Chakki Atta", category: "Atta & Flour", unit: "pcs", packSize: "10 kg bag", sell: 450, lowStock: 20, buys: [["opening", 80, 405], ["third", 40, 398]] },
-  { sku: "MAIDA-50", name: "Maida", category: "Atta & Flour", unit: "pcs", packSize: "50 kg bag", sell: 1950, lowStock: 5, buys: [["opening", 12, 1780]] },
-  { sku: "BESAN-1", name: "Besan 1 kg", category: "Atta & Flour", unit: "pcs", packSize: "1 kg packet", sell: 105, lowStock: 24, buys: [["opening", 96, 92]] },
-  { sku: "SOOJI-1", name: "Sooji (Rava) 1 kg", category: "Atta & Flour", unit: "pcs", packSize: "1 kg packet", sell: 52, lowStock: 24, buys: [["opening", 60, 45]] },
-
-  // Edible Oil & Ghee
-  { sku: "OIL-MUS-1", name: "Kachi Ghani Mustard Oil 1 L", category: "Edible Oil & Ghee", unit: "pcs", packSize: "1 L bottle", sell: 175, lowStock: 24, buys: [["opening", 120, 158], ["latest", 60, 161]] },
-  { sku: "OIL-SOY-15", name: "Refined Soyabean Oil", category: "Edible Oil & Ghee", unit: "pcs", packSize: "15 L tin", sell: 1950, lowStock: 5, buys: [["opening", 25, 1810]] },
-  { sku: "OIL-GNUT-5", name: "Groundnut Oil", category: "Edible Oil & Ghee", unit: "pcs", packSize: "5 L can", sell: 1050, lowStock: 6, buys: [["opening", 20, 960]] },
-  { sku: "OIL-SUN", name: "Sunflower Oil (loose)", category: "Edible Oil & Ghee", unit: "litre", sell: 140, lowStock: 30, buys: [["opening", 150, 128], ["third", 75.5, 131]] },
-  { sku: "GHEE-1", name: "Desi Ghee 1 L", category: "Edible Oil & Ghee", unit: "pcs", packSize: "1 L tin", sell: 640, lowStock: 12, buys: [["opening", 48, 585]] },
-
-  // Masala & Spices
-  { sku: "HALDI-500", name: "Haldi Powder 500 g", category: "Masala & Spices", unit: "pcs", packSize: "500 g packet", sell: 120, lowStock: 24, buys: [["opening", 72, 98]] },
-  { sku: "MIRCH-500", name: "Lal Mirch Powder 500 g", category: "Masala & Spices", unit: "pcs", packSize: "500 g packet", sell: 160, lowStock: 24, buys: [["opening", 72, 135]] },
-  { sku: "DHANIYA-500", name: "Dhaniya Powder 500 g", category: "Masala & Spices", unit: "pcs", packSize: "500 g packet", sell: 95, lowStock: 24, buys: [["opening", 60, 78]] },
-  { sku: "JEERA", name: "Jeera (Whole)", category: "Masala & Spices", unit: "kg", sell: 520, lowStock: 10, buys: [["opening", 25, 470], ["latest", 15, 489]] },
-  { sku: "GARAM-100", name: "Garam Masala 100 g", category: "Masala & Spices", unit: "pcs", packSize: "100 g box", sell: 75, lowStock: 24, buys: [["opening", 96, 60]] },
-  { sku: "RAI-1", name: "Rai (Mustard Seeds) 1 kg", category: "Masala & Spices", unit: "pcs", packSize: "1 kg packet", sell: 95, lowStock: 12, buys: [["opening", 30, 82]] },
-  { sku: "HING-50", name: "Hing 50 g", category: "Masala & Spices", unit: "dozen", packSize: "12 × 50 g", sell: 1080, lowStock: 2, buys: [["opening", 6, 864]] },
-  { sku: "KALI-MIRCH", name: "Kali Mirch (Black Pepper)", category: "Masala & Spices", unit: "kg", sell: 780, lowStock: 5, buys: [["opening", 3.5, 700]] },
-  { sku: "ELAICHI", name: "Elaichi (Green Cardamom)", category: "Masala & Spices", unit: "kg", sell: 2900, lowStock: 2, buys: [] },
-
-  // Sugar, Salt & Gur
-  { sku: "SUGAR-LOOSE", name: "Sugar (loose)", category: "Sugar, Salt & Gur", unit: "kg", sell: 46, lowStock: 200, buys: [["opening", 600, 42]] },
-  { sku: "SUGAR-50", name: "Sugar", category: "Sugar, Salt & Gur", unit: "pcs", packSize: "50 kg bag", sell: 2250, lowStock: 10, buys: [["opening", 30, 2080], ["second", 20, 2105]] },
-  { sku: "SALT-1-B25", name: "Iodised Salt 1 kg", category: "Sugar, Salt & Gur", unit: "bundle", packSize: "25 × 1 kg", sell: 525, lowStock: 4, buys: [["opening", 20, 470]] },
-  { sku: "SENDHA-1", name: "Sendha Namak 1 kg", category: "Sugar, Salt & Gur", unit: "pcs", packSize: "1 kg packet", sell: 70, lowStock: 12, buys: [["opening", 40, 58]] },
-  { sku: "GUR", name: "Gur (Jaggery)", category: "Sugar, Salt & Gur", unit: "kg", sell: 62, lowStock: 25, buys: [["third", 80, 54]] },
-
-  // Tea & Coffee
-  { sku: "TEA-CTC-1", name: "CTC Tea 1 kg", category: "Tea & Coffee", unit: "pcs", packSize: "1 kg packet", sell: 420, lowStock: 12, buys: [["opening", 50, 375]] },
-  { sku: "TEA-250-DZ", name: "Tea 250 g", category: "Tea & Coffee", unit: "dozen", packSize: "12 × 250 g", sell: 1260, lowStock: 3, buys: [["opening", 10, 1140]] },
-  { sku: "COFFEE-100", name: "Instant Coffee 100 g Jar", category: "Tea & Coffee", unit: "pcs", packSize: "100 g jar", sell: 330, lowStock: 12, buys: [["opening", 8, 295]] },
-
-  // Biscuits & Namkeen
-  { sku: "BISC-GLU-48", name: "Glucose Biscuits", category: "Biscuits & Namkeen", unit: "box", packSize: "48 packets", sell: 480, lowStock: 5, buys: [["opening", 30, 432], ["latest", 20, 436]] },
-  { sku: "BISC-CRM-24", name: "Cream Biscuits", category: "Biscuits & Namkeen", unit: "box", packSize: "24 packets", sell: 576, lowStock: 4, buys: [["opening", 15, 520]] },
-  { sku: "BHUJIA-1", name: "Aloo Bhujia 1 kg", category: "Biscuits & Namkeen", unit: "pcs", packSize: "1 kg packet", sell: 260, lowStock: 12, buys: [["opening", 36, 228]] },
-  { sku: "MIXTURE-DZ", name: "Namkeen Mixture 400 g", category: "Biscuits & Namkeen", unit: "dozen", packSize: "12 × 400 g", sell: 1080, lowStock: 3, buys: [["second", 12, 960]] },
-  { sku: "RUSK-DZ", name: "Elaichi Rusk 300 g", category: "Biscuits & Namkeen", unit: "dozen", packSize: "12 × 300 g", sell: 600, lowStock: 3, buys: [["opening", 2, 528]] },
-
-  // Soap & Detergent
-  { sku: "DET-PWD-1", name: "Detergent Powder 1 kg", category: "Soap & Detergent", unit: "pcs", packSize: "1 kg packet", sell: 95, lowStock: 24, buys: [["opening", 120, 82]] },
-  { sku: "DET-BAR-40", name: "Detergent Bar 250 g", category: "Soap & Detergent", unit: "box", packSize: "40 bars", sell: 980, lowStock: 3, buys: [["opening", 15, 880]] },
-  { sku: "SOAP-BATH-DZ", name: "Bathing Soap 100 g", category: "Soap & Detergent", unit: "dozen", packSize: "12 bars", sell: 420, lowStock: 5, buys: [["opening", 25, 372]] },
-  { sku: "DISHWASH-DZ", name: "Dishwash Bar 500 g", category: "Soap & Detergent", unit: "dozen", packSize: "12 bars", sell: 540, lowStock: 4, buys: [["opening", 18, 480]] },
-  { sku: "PHENYL-5", name: "Phenyl Floor Cleaner", category: "Soap & Detergent", unit: "pcs", packSize: "5 L can", sell: 390, lowStock: 6, buys: [["third", 15, 330]] },
-
-  // Household
-  { sku: "AGARBATTI-DZ", name: "Agarbatti (Rose)", category: "Household", unit: "dozen", packSize: "12 packets", sell: 300, lowStock: 5, buys: [["opening", 40, 252]] },
-  { sku: "MATCH-BDL", name: "Matchbox", category: "Household", unit: "bundle", packSize: "10 packs × 10 boxes", sell: 100, lowStock: 10, buys: [["opening", 60, 86]] },
-  { sku: "CANDLE-BOX", name: "White Candles", category: "Household", unit: "box", packSize: "6 candles", sell: 120, lowStock: 10, buys: [["opening", 40, 100]] },
-  { sku: "JHADU", name: "Jhadu (Grass Broom)", category: "Household", unit: "pcs", sell: 120, lowStock: 10, buys: [["second", 30, 95]] },
-  { sku: "FOIL-9M", name: "Aluminium Foil 9 m", category: "Household", unit: "pcs", packSize: "9 m roll", sell: 85, lowStock: 12, buys: [["opening", 5, 70]] },
-  { sku: "GARBAGE-BDL", name: "Garbage Bags (Medium)", category: "Household", unit: "bundle", packSize: "10 rolls", sell: 180, lowStock: 5, buys: [] },
+const ACRYLIC_SHADES = [
+  "White", "Black", "Yellow", "Light Green", "Blue", "Orange",
+  "Red", "Silver", "Golden", "Brown", "Sap Green", "Pink",
 ];
 
-/** The businesses you sell to ("Customers" in the app). Phone numbers are fictitious. */
+// Names lightly cleaned up from the price list (spelling, capitals) so search works well.
+const rows: Row[] = [
+  [1, "CD/DVD/OHP Marker", "Pkt of 10", 10, "pcs", C.markers, ["Black", "Blue"]],
+  [2, "Permanent Marker", "Pkt of 10", 20, "pcs", C.markers, ["Black", "Blue", "Red"]],
+  [3, "White Board Marker", "Pkt of 10", 25, "pcs", C.markers, ["Black", "Blue", "Red", "Green"]],
+  [4, "White Board Marker Ink", null, 35, "pcs", C.markers, ["Blue", "Black"]],
+  [5, "White Glue", "20 g", 10, "pcs", C.glue],
+  [6, "White Glue", "45 g", 20, "pcs", C.glue],
+  [7, "White Glue", "105 g", 45, "pcs", C.glue],
+  [8, "Glue Stick", "8 g", 25, "pcs", C.glue],
+  [9, "Glue Stick", "15 g", 40, "pcs", C.glue],
+  [10, "Gum", "20 ml", 5, "pcs", C.glue],
+  [11, "Gum", "50 ml", 10, "pcs", C.glue],
+  [12, "Neon Pencils", "Pkt of 10", 5, "pcs", C.pencils],
+  [13, "X1 Pencils", "Pkt of 10", 5, "pcs", C.pencils],
+  [14, "A1 Pencils", "Pkt of 10", 5, "pcs", C.pencils],
+  [15, "Y1 Pencils", "Pkt of 10", 5, "pcs", C.pencils],
+  [16, "Karbon Pencils", "Pkt of 10", 7, "pcs", C.pencils],
+  [17, "Groove Pencils", "Pkt of 10", 5.8, "pcs", C.pencils],
+  [18, "Fusion Pencils", "Pkt of 10", 7, "pcs", C.pencils],
+  [19, "Zillon Pencils", "Pkt of 11", 6, "pcs", C.pencils],
+  [20, "Luxe Pencils", "Pkt of 10", 6, "pcs", C.pencils],
+  [21, "Heritage Pencils", "Pkt of 10", 4, "pcs", C.pencils],
+  [22, "Superio Pencils", "Pkt of 10", 125, "pkt", C.pencils],
+  [23, "Drawing Pencil Set", "HB, 2B, 4B, 6B, 8B, 10B", 48, "set", C.pencils],
+  [24, "Mechanical Pencil", "0.7 mm", 10, "pcs", C.pencils],
+  [25, "Colour Pencils", "12 Colours", 29, "box", C.colourPencils],
+  [26, "Colour Pencils (Large Size)", "12 Colours", 60, "box", C.colourPencils],
+  [27, "Colour Pencils", "24 Shades", 120, "box", C.colourPencils],
+  [28, "Colour Pencils (Small Box)", "12 Colours", 40, "box", C.colourPencils],
+  [29, "Colour Pencils (Large Box)", "12 Colours", 107, "box", C.colourPencils],
+  [30, "Wax Crayons", "Pkt of 10", 10, "box", C.colourPencils],
+  [31, "Wax Crayons (Extra Long)", "16 + 1 Shades", 40, "box", C.colourPencils],
+  [32, "Plastic Crayons", "Pkt of 10", 60, "box", C.colourPencils],
+  [33, "Oil Pastels (Plastic Box)", "12 Shades", 20, "box", C.paints],
+  [34, "Oil Pastels", "12 Shades", 50, "box", C.paints],
+  [35, "Oil Pastels", "16 Shades", 65, "box", C.paints],
+  [36, "Oil Pastels (Plastic Box)", "25 Shades", 120, "box", C.paints],
+  [37, "Oil Pastels", "25 Shades", 100, "box", C.paints],
+  [38, "Oil Pastels (Plastic Box)", "50 Shades", 230, "box", C.paints],
+  [39, "Oil Pastels", "50 Shades", 190, "box", C.paints],
+  [40, "Tempera Colours", "12 Shades", 20, "box", C.paints],
+  [41, "Poster Colours", "6 Shades", 100, "box", C.paints],
+  [42, "Poster Colours", "12 Shades", 190, "box", C.paints],
+  [43, "Poster Colours", "14 Shades", 220, "box", C.paints],
+  [44, "Colourmate Round Brush", "Set of 5", 50, "set", C.brushes],
+  [45, "Colourmate Flat Brush", "Set of 4", 50, "set", C.brushes],
+  [46, "Colourmate Combo Brush", "Set of 7", 90, "set", C.brushes],
+  [47, "Artistic Brush (0, 2, 4, 6)", "Set of 4", 85, "set", C.brushes],
+  [48, "Studio Round Brush (0–12)", "Set of 7", 250, "set", C.brushes],
+  [49, "Studio Flat Brush (1–12)", "Set of 7", 400, "set", C.brushes],
+  [50, "Geometry Box (Geofine)", null, 80, "pcs", C.geometry],
+  [51, "Geometry Box (Geommy)", null, 100, "pcs", C.geometry],
+  [52, "Geometry Box (Geomiti)", null, 100, "pcs", C.geometry],
+  [53, "Geometry Box (Geotron)", null, 110, "pcs", C.geometry],
+  [54, "Geometry Box (X1 Premium)", null, 150, "pcs", C.geometry],
+  [55, "All The Best Art Kit", null, 20, "pcs", C.art],
+  [56, "Speedz Art Kit", null, 30, "pcs", C.art],
+  [57, "Unicorn Art Kit", null, 150, "pcs", C.art],
+  [58, "Art Kit", "₹99 kit", 99, "pcs", C.art],
+  [59, "Art Kit", "₹149 kit", 149, "pcs", C.art],
+  [60, "Art Kit", "₹199 kit", 199, "pcs", C.art],
+  [61, "Exam Essential Kit", null, 300, "pcs", C.art],
+  [62, "Art Apps NXT", null, 425, "pcs", C.art],
+  [63, "Clay Bucket", "Small", 40, "pcs", C.art],
+  [64, "Clay Bucket", "Medium", 85, "pcs", C.art],
+  [65, "Clay Bucket", "Large", 150, "pcs", C.art],
+  [66, "Clay", "Small", 60, "pcs", C.art],
+  [67, "Clay", "Medium", 100, "pcs", C.art],
+  [68, "Clay", "Large", 175, "pcs", C.art],
+  [69, "Sketch Pens", "Pkt of 20", 15, "pkt", C.pens],
+  [70, "Sketch Pens (Large Size)", "Pkt of 10", 40, "pkt", C.pens],
+  [71, "Sketch Pens (Box)", null, 125, "box", C.pens],
+  [72, "Brush Pens", "₹200 set", 200, "set", C.pens],
+  [73, "Brush Pens", "₹400 set", 400, "set", C.pens],
+  [74, "Colour Cake (Small Size)", null, 65, "pcs", C.paints],
+  [75, "Colour Cake (Large Size)", null, 100, "pcs", C.paints],
+  [76, "Colour Cake", null, 150, "pcs", C.paints],
+  [77, "M-Tech Erasers", "Pkt of 10", 10, "pcs", C.erasers],
+  [78, "Dust Free Erasers", "Pkt of 10", 5, "pcs", C.erasers],
+  [79, "Neon Eraser (Hexagon)", "Pkt of 10", 5, "pcs", C.erasers],
+  [80, "Car Eraser", "Pkt of 12", 10, "pcs", C.erasers],
+  [81, "Tom & Jerry Eraser", "Pkt of 10", 10, "pcs", C.erasers],
+  [82, "Eraser (Tyre)", "Pkt of 40", 5, "pcs", C.erasers],
+  [83, "Eraser (Tyre)", "Pkt of 20", 10, "pcs", C.erasers],
+  [84, "Groove Erasers", "Pkt of 10", 25, "pcs", C.erasers],
+  [85, "Sharpeners (Long)", "Pkt of 20", 5, "pcs", C.erasers],
+  [86, "Dust Collector Sharpeners", "Pkt of 10", 10, "pcs", C.erasers],
+  [87, "Rocket Point Erasner", "Pkt of 10", 20, "pcs", C.erasers],
+  [88, "Super Point Sharpeners", "Pkt of 10", 20, "pcs", C.erasers],
+  [89, "3HX Sharpeners", "Pkt of 12", 30, "pcs", C.erasers],
+  [90, "2 in 1 E-Racer Erasner", "Pkt of 20", 15, "pcs", C.erasers],
+  [91, "2 in 1 Buddy Erasner", "Pkt of 10", 15, "pcs", C.erasers],
+  [92, "Erasner", "Pkt of 20", 10, "pcs", C.erasers],
+  [93, "Pepcils Erasers", "Pkt of 20", 10, "pcs", C.erasers],
+  [94, "Highlighter", "Pkt of 5", 25, "pcs", C.highlight],
+  [95, "Correction Pen", "Pkt of 10", 25, "pcs", C.highlight],
+  [96, "Acrylic Colour (Single)", null, 25, "pcs", C.paints, ACRYLIC_SHADES],
+  [97, "Acrylic Colours", "6 Shades", 100, "box", C.paints],
+  [98, "Acrylic Colours", "12 Shades", 250, "box", C.paints],
+  [99, "Inxklik Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [100, "Inxtra Pen", "Pkt of 5", 5, "pcs", C.pens, ["Blue", "Black", "Red"]],
+  [101, "Inxtra Fine Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [102, "Inxtra Glass Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [103, "Inxtra Candy Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [104, "Inxfy Pen", "Pkt of 5", 5, "pcs", C.pens, ["Blue", "Black"]],
+  [105, "Inxfy Softy Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [106, "Inxfy Plus Pen", "Pkt of 5", 5, "pcs", C.pens],
+  [107, "Inxfy Pen Jar", "100 pens", 500, "jar", C.pens],
+  [108, "Inxfy Softy Pen Jar", "100 pens", 500, "jar", C.pens],
+  [109, "Inxtra Candy Pen Jar", "100 pens", 500, "jar", C.pens],
+  [110, "Kika Pen Jar", "25 pens", 125, "jar", C.pens],
+  [111, "Inxon Pen", "Pkt of 10", 10, "pcs", C.pens],
+  [112, "Inxglo Pen", "Pkt of 10", 10, "pcs", C.pens],
+  [113, "Inxo Classic Pen", "Pkt of 10", 10, "pcs", C.pens],
+  [114, "Inxpop Pen", "Pkt of 10", 10, "pcs", C.pens],
+  [115, "White Chalk", "Pkt of 10", 20, "pkt", C.chalk],
+  [116, "Colour Chalk", "Pkt of 10", 25, "pkt", C.chalk],
+  [117, "Glitter Colours", null, 35, "pcs", C.paints],
+  [118, "Water Colour Tube", null, 100, "pcs", C.paints],
+  [119, "Transparent Exam Board", null, 150, "pcs", C.chalk],
+  [120, "Compass", "Pkt of 10", 25, "pcs", C.geometry],
+  [121, "Scale (15 cm)", "Pkt of 10", 5, "pcs", C.geometry],
+  [122, "Scale (30 cm)", "Pkt of 10", 12, "pcs", C.geometry],
+  [123, "Spiral Notebook Pocket (10.5 × 7.4 cm)", "100 pages", 20, "pcs", C.books],
+  [124, "Spiral Notebook (21.6 × 14 cm)", "160 pages", 106, "pcs", C.books],
+  [125, "Spiral Notebook (25 × 17.8 cm)", "300 pages", 250, "pcs", C.books],
+  [126, "Sketch Book A5 (21 × 14.8 cm)", "72 pages", 77, "pcs", C.books],
+  [127, "Sketch Book A4 (21 × 29.7 cm)", "72 pages", 145, "pcs", C.books],
+  [128, "Sketch Book (27.5 × 34.7 cm)", "72 pages", 210, "pcs", C.books],
+  [129, "Sketch Book A3 (29.7 × 42 cm)", "72 pages", 270, "pcs", C.books],
+];
+
+/** List numbers with no stock at all (to show "Out of stock"). */
+const OUT_OF_STOCK = new Set([22, 62, 110, 129]);
+/** List numbers with only a little stock (to show "Low stock"). */
+const LOW_STOCK = new Set([9, 27, 54, 73, 125]);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Opening quantity by unit, varied a little by list number so the numbers look real. */
+function openingQty(no: number, unit: Unit): number {
+  const spread = (no * 37) % 7; // 0–6
+  switch (unit) {
+    case "pcs":
+      return 100 + spread * 50; // 100–400 pieces
+    case "jar":
+      return 3 + (spread % 4);
+    default:
+      return 20 + spread * 5; // 20–50 boxes / sets / packets
+  }
+}
+
+function lowStockLevel(unit: Unit): number {
+  return unit === "pcs" ? 50 : unit === "jar" ? 2 : 10;
+}
+
+function buildItem(row: Row, variant?: string): SeedItem {
+  const [no, name, packSize, mrp, unit, category] = row;
+  const sku = `DOMS-${String(no).padStart(3, "0")}${variant ? `-${variant.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}` : ""}`;
+  const cost = round2(mrp * 0.7);
+  const low = lowStockLevel(unit);
+  let buys: SeedItem["buys"] = [["opening", openingQty(no, unit), cost]];
+  if (OUT_OF_STOCK.has(no)) buys = [];
+  else if (LOW_STOCK.has(no)) buys = [["opening", Math.max(1, Math.floor(low / 3)), cost]];
+  else if (no % 4 === 0) buys.push(["second", Math.round(openingQty(no, unit) / 2), round2(mrp * 0.72)]);
+  else if (no % 9 === 0) buys.push(["third", Math.round(openingQty(no, unit) / 3), round2(mrp * 0.71)]);
+  else if (no % 11 === 0) buys.push(["latest", Math.round(openingQty(no, unit) / 4), round2(mrp * 0.72)]);
+
+  return {
+    sku,
+    name,
+    variant,
+    brand: "DOMS",
+    category,
+    unit,
+    packSize: packSize ?? undefined,
+    mrp,
+    sell: round2(mrp * 0.85),
+    lowStock: low,
+    buys,
+  };
+}
+
+export const seedItems: SeedItem[] = rows.flatMap((row) => {
+  const variants = row[6];
+  return variants ? variants.map((v) => buildItem(row, v)) : [buildItem(row)];
+});
+
+/** The shops and schools you sell to ("Customers" in the app). Phone numbers are fictitious. */
 export const seedVendors = [
-  { businessName: "Sharma Kirana Store", contactPerson: "Rajesh Sharma", phone: "9829012345", city: "Jaipur", address: "12, Johari Bazaar" },
-  { businessName: "Gupta General Stores", contactPerson: "Anil Gupta", phone: "9415023456", city: "Lucknow", address: "45, Aminabad Market" },
-  { businessName: "Patel Provision Mart", contactPerson: "Hiren Patel", phone: "9825034567", city: "Ahmedabad", address: "7, Maninagar Char Rasta" },
-  { businessName: "Sri Lakshmi Traders", contactPerson: "K. Srinivas", phone: "9848045678", city: "Hyderabad", address: "3-4-112, Kachiguda" },
-  { businessName: "Murugan Stores", contactPerson: "S. Murugan", phone: "9840056789", city: "Chennai", address: "22, Ranganathan Street, T. Nagar" },
-  { businessName: "Das Brothers", contactPerson: "Subhash Das", phone: "9830067890", city: "Kolkata", address: "18, Burrabazar" },
-  { businessName: "Joshi Super Mart", contactPerson: "Meera Joshi", phone: "9822078901", city: "Pune", address: "Shop 4, Kothrud Depot" },
-  { businessName: "Singh Departmental Store", contactPerson: "Harpreet Singh", phone: "9814089012", city: "Ludhiana", address: "Ghumar Mandi" },
-  { businessName: "Reddy Wholesale", contactPerson: "Venkata Reddy", phone: "9849090123", city: "Vijayawada", address: "Wholesale Market, One Town" },
-  { businessName: "Khan Kirana", contactPerson: "Imran Khan", phone: "9826001234", city: "Bhopal", address: "Ibrahimpura, Old City" },
-  { businessName: "Bora Enterprises", contactPerson: "Pranjal Bora", phone: "9864012345", city: "Guwahati", address: "Fancy Bazaar" },
-  { businessName: "Nair Stores", contactPerson: "Suresh Nair", phone: "9847023456", city: "Kochi", address: "Broadway, Ernakulam" },
-  { businessName: "Agarwal Traders", contactPerson: "Pankaj Agarwal", phone: "9336034567", city: "Kanpur", address: "Collectorganj" },
-  { businessName: "Deshmukh Provisions", contactPerson: "Sanjay Deshmukh", phone: "9823045678", city: "Nagpur", address: "Itwari Market" },
-  { businessName: "Mehta & Sons", contactPerson: "Kunal Mehta", phone: "9824056789", city: "Surat", address: "Ring Road, Textile Market" },
+  { businessName: "Sarkar Book Stall", contactPerson: "Biplab Sarkar", phone: "9436012345", city: "Agartala", address: "Battala Market" },
+  { businessName: "Das Stationers", contactPerson: "Tapan Das", phone: "9436023456", city: "Agartala", address: "Post Office Chowmuhani" },
+  { businessName: "Debnath Book House", contactPerson: "Sujit Debnath", phone: "9862034567", city: "Udaipur", address: "Rajarbag Road" },
+  { businessName: "Saha Stationery", contactPerson: "Mitali Saha", phone: "9774045678", city: "Dharmanagar", address: "Station Road" },
+  { businessName: "Chakraborty Stores", contactPerson: "Partha Chakraborty", phone: "9436056789", city: "Kailashahar", address: "Main Road" },
+  { businessName: "Bhowmik Book Centre", contactPerson: "Ranjit Bhowmik", phone: "9862067890", city: "Belonia", address: "Court Road" },
+  { businessName: "Roy Stationery Mart", contactPerson: "Ananya Roy", phone: "9774078901", city: "Khowai", address: "Bazar Road" },
+  { businessName: "Paul Book Depot", contactPerson: "Swapan Paul", phone: "9436089012", city: "Ambassa", address: "Near Bus Stand" },
+  { businessName: "Majumder Enterprises", contactPerson: "Sanjib Majumder", phone: "9862090123", city: "Teliamura", address: "Netaji Market" },
+  { businessName: "Dey Stationers", contactPerson: "Kakali Dey", phone: "9774001234", city: "Sonamura", address: "College Road" },
+  { businessName: "Nath Book Stall", contactPerson: "Pradip Nath", phone: "9436012340", city: "Bishalgarh", address: "Thana Road" },
+  { businessName: "Acharjee Traders", contactPerson: "Gautam Acharjee", phone: "9862023450", city: "Kumarghat", address: "Station Bazar" },
+  { businessName: "Ghosh Paper House", contactPerson: "Subrata Ghosh", phone: "9774034560", city: "Agartala", address: "Motor Stand Road" },
+  { businessName: "Sen Stationery", contactPerson: "Rupa Sen", phone: "9436045670", city: "Sabroom", address: "Main Bazar" },
+  { businessName: "Banik Book Corner", contactPerson: "Amit Banik", phone: "9862056780", city: "Amarpur", address: "School Road" },
 ] as const;
 
 export const seedUsers = [

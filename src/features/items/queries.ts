@@ -16,6 +16,10 @@ export function listCategories() {
   return data.listCategories(getDb());
 }
 
+export function listBrands() {
+  return data.listBrands(getDb());
+}
+
 export function listUnits() {
   return data.listUnits(getDb());
 }

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import * as schema from "../schema";
 import type { Database } from "../types";
-import { seedCategories, seedItems, seedStockEntries, seedVendors } from "./data";
+import { seedBrands, seedCategories, seedItems, seedStockEntries, seedVendors } from "./data";
 import { rupeesToPaise } from "@/lib/money";
 import { parseQty, qtyToDb } from "@/lib/qty";
 
@@ -16,7 +16,7 @@ function paise(rupees: number) {
 /** Removes all items, customers, stock and orders. Logins and units are kept. */
 export async function wipeBusinessData(db: Database) {
   await db.execute(sql`
-    TRUNCATE order_lines, stock_movements, orders, stock_entries, items, categories, vendors, order_counters
+    TRUNCATE order_lines, stock_movements, orders, stock_entries, items, categories, brands, vendors, order_counters
   `);
   await db.execute(sql`ALTER SEQUENCE item_sku_seq RESTART`);
 }
@@ -39,6 +39,12 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
       .returning();
     const categoryId = new Map(categories.map((c) => [c.name, c.id]));
 
+    const brands = await tx
+      .insert(schema.brands)
+      .values(seedBrands.map((name) => ({ name, createdBy: ownerId })))
+      .returning();
+    const brandId = new Map(brands.map((b) => [b.name, b.id]));
+
     const items = await tx
       .insert(schema.items)
       .values(
@@ -48,9 +54,12 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
           return {
             sku: item.sku,
             name: item.name,
+            variant: item.variant ?? null,
+            brandId: brandId.get(item.brand),
             categoryId: categoryId.get(item.category),
             unitId: unit.id,
             packSize: item.packSize ?? null,
+            mrpPaise: paise(item.mrp),
             sellingPricePaise: paise(item.sell),
             lowStockThreshold: qtyToDb(item.lowStock * 1000),
             createdAt: new Date(now - 30 * DAY_MS),
@@ -103,6 +112,7 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
 
     return {
       categories: categories.length,
+      brands: brands.length,
       items: items.length,
       vendors: seedVendors.length,
       stockEntries: seedStockEntries.length,

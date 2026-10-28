@@ -45,10 +45,10 @@ describe("listCustomers", () => {
   it("searches name, contact person, phone and city", async () => {
     const by = async (q: string) =>
       (await listCustomers(db, { q })).rows.map((r) => r.businessName);
-    expect(await by("sharma")).toEqual(["Sharma Kirana Store"]);
-    expect(await by("harpreet")).toEqual(["Singh Departmental Store"]);
-    expect(await by("98290 12345")).toEqual(["Sharma Kirana Store"]);
-    expect(await by("kochi")).toEqual(["Nair Stores"]);
+    expect(await by("sarkar")).toEqual(["Sarkar Book Stall"]);
+    expect(await by("partha")).toEqual(["Chakraborty Stores"]);
+    expect(await by("94360 12345")).toEqual(["Sarkar Book Stall"]);
+    expect(await by("udaipur")).toEqual(["Debnath Book House"]);
   });
 
   it("sorts by city", async () => {
@@ -85,15 +85,13 @@ describe("order history", () => {
         .insert(schema.orders)
         .values({ vendorId: customer.id, createdBy: ownerId })
         .returning();
-      await db
-        .insert(schema.orderLines)
-        .values({
-          orderId: order.id,
-          itemId: item.id,
-          quantity: "1.000",
-          unitPricePaise: total,
-          createdBy: ownerId,
-        });
+      await db.insert(schema.orderLines).values({
+        orderId: order.id,
+        itemId: item.id,
+        quantity: "1.000",
+        unitPricePaise: total,
+        createdBy: ownerId,
+      });
       await db
         .update(schema.orders)
         .set({

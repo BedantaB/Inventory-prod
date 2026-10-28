@@ -139,6 +139,9 @@ e2e/                Playwright flows
 - Tables have `id uuid`, `created_at`, `updated_at` (DB trigger), `created_by`.
 - Soft delete via `archived_at`; nothing is hard-deleted except discarded draft orders.
 - Exception: `stock_movements` has no `updated_at`/`archived_at` because it is a ledger.
+- Items: show names with `itemDisplayName()` ("Permanent Marker – Blue"). Each colour or variant
+  is its own item.
+- Items: MRP is optional, and selling price ≤ MRP (Zod + DB check).
 - "Vendors" in code/DB are the businesses we **sell to**; the UI calls them **Customers**.
 - Order numbers: `ORD-<financial year>-00001` (`src/lib/financial-year.ts`), gapless per FY via
   `order_counters`.

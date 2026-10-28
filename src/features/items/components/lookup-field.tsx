@@ -16,41 +16,49 @@ import {
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useMessages } from "@/i18n/provider";
-import { createCategoryAction } from "../actions";
+import type { ActionResult } from "@/lib/forms";
 import { categorySchema } from "../schemas";
 
-type Category = { id: string; name: string };
+type Option = { id: string; name: string };
 
-/** Category dropdown with a "+ New category" button, so nobody has to leave the item form. */
-export function CategoryField({
-  categories,
+/**
+ * A dropdown of named things (categories, brands) with a "+" button to add a new one
+ * without leaving the item form.
+ */
+export function LookupField({
+  name,
+  label,
+  emptyLabel,
+  options: initialOptions,
   defaultValue,
   error,
+  create,
+  text,
 }: {
-  categories: Category[];
+  name: string;
+  label: string;
+  emptyLabel: string;
+  options: Option[];
   defaultValue: string | null;
   error?: string;
+  create: (formData: FormData) => Promise<ActionResult<Option>>;
+  text: { add: string; title: string; fieldLabel: string; placeholder: string };
 }) {
   const m = useMessages();
-  const [options, setOptions] = useState(categories);
+  const [options, setOptions] = useState(initialOptions);
   const [value, setValue] = useState(defaultValue ?? "");
 
-  const onCreated = (category: Category) => {
+  const onCreated = (option: Option) => {
     setOptions((prev) =>
-      prev.some((c) => c.id === category.id)
+      prev.some((o) => o.id === option.id)
         ? prev
-        : [...prev, category].sort((a, b) => a.name.localeCompare(b.name)),
+        : [...prev, option].sort((a, b) => a.name.localeCompare(b.name)),
     );
-    setValue(category.id);
+    setValue(option.id);
   };
 
   return (
-    <FormField
-      name="categoryId"
-      label={m.items.category}
-      optionalLabel={m.common.optional}
-      error={error}
-    >
+    <FormField name={name} label={label} optionalLabel={m.common.optional} error={error}>
       {(p) => (
         <div className="flex gap-2">
           <NativeSelect
@@ -59,24 +67,32 @@ export function CategoryField({
             onChange={(e) => setValue(e.target.value)}
             className="flex-1"
           >
-            <option value="">{m.items.noCategory}</option>
-            {options.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
+            <option value="">{emptyLabel}</option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
               </option>
             ))}
           </NativeSelect>
-          <NewCategoryDialog onCreated={onCreated} />
+          <AddDialog create={create} onCreated={onCreated} text={text} />
         </div>
       )}
     </FormField>
   );
 }
 
-function NewCategoryDialog({ onCreated }: { onCreated: (category: Category) => void }) {
+function AddDialog({
+  create,
+  onCreated,
+  text,
+}: {
+  create: (formData: FormData) => Promise<ActionResult<Option>>;
+  onCreated: (option: Option) => void;
+  text: { add: string; title: string; fieldLabel: string; placeholder: string };
+}) {
   const m = useMessages();
   const [open, setOpen] = useState(false);
-  const { pending, errorFor, formProps } = useServerForm(createCategoryAction, {
+  const { pending, errorFor, formProps } = useServerForm(create, {
     schema: categorySchema,
     onSuccess: (result) => {
       if (result.data) onCreated(result.data);
@@ -87,25 +103,18 @@ function NewCategoryDialog({ onCreated }: { onCreated: (category: Category) => v
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline">
+        <Button type="button" variant="outline" aria-label={text.add}>
           <PlusIcon aria-hidden />
-          <span className="max-sm:sr-only">{m.items.newCategory}</span>
+          <span className="max-sm:sr-only">{text.add}</span>
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-xl">{m.items.newCategoryTitle}</DialogTitle>
+          <DialogTitle className="text-xl">{text.title}</DialogTitle>
         </DialogHeader>
         <form {...formProps} className="flex flex-col gap-5">
-          <FormField name="name" label={m.items.newCategoryName} error={errorFor("name")} required>
-            {(p) => (
-              <Input
-                {...p}
-                placeholder={m.items.newCategoryPlaceholder}
-                autoComplete="off"
-                autoFocus
-              />
-            )}
+          <FormField name="name" label={text.fieldLabel} error={errorFor("name")} required>
+            {(p) => <Input {...p} placeholder={text.placeholder} autoComplete="off" autoFocus />}
           </FormField>
           <SubmitButton
             pending={pending}
