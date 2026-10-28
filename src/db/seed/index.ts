@@ -136,6 +136,7 @@ async function main() {
     `  ✔ ${summary.categories} categories, ${summary.items} items, ${summary.vendors} customers`,
   );
   console.log(`  ✔ ${summary.stockEntries} stock-in bills with ${summary.movements} lines`);
+  console.log(`  ✔ ${summary.orders} completed orders`);
   console.log("\nDone. Log in as the owner with SEED_ADMIN_EMAIL, or as staff with username");
   console.log("`ramesh` / `sunita` and SEED_STAFF_PASSWORD.");
 }

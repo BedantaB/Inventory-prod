@@ -9,6 +9,13 @@ import { failure, parseForm, success, type ActionResult } from "@/lib/forms";
 import * as data from "./data";
 import { customerSchema } from "./schemas";
 
+export type SavedCustomer = {
+  id: string;
+  businessName: string;
+  phone: string;
+  city: string | null;
+};
+
 const isUuid = (id: string) => z.uuid().safeParse(id).success;
 
 function revalidateCustomers(id?: string) {
@@ -18,7 +25,7 @@ function revalidateCustomers(id?: string) {
 
 export async function createCustomerAction(
   formData: FormData,
-): Promise<ActionResult<{ id: string; businessName: string }>> {
+): Promise<ActionResult<SavedCustomer>> {
   const actor = await requireUser();
   const parsed = parseForm(customerSchema, formData);
   if (!parsed.ok) return parsed.result;

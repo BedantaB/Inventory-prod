@@ -26,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full text-base">
         <I18nProvider messages={getMessages()}>
           {children}
-          <Toaster position="top-center" />
+          <Toaster position="top-center" className="print:hidden" />
         </I18nProvider>
       </body>
     </html>

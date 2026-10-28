@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useMessages } from "@/i18n/provider";
 import { formatPhone } from "@/lib/phone";
-import { createCustomerAction, updateCustomerAction } from "../actions";
+import { createCustomerAction, updateCustomerAction, type SavedCustomer } from "../actions";
 import type { CustomerView } from "../data";
 import { customerSchema } from "../schemas";
 
@@ -22,18 +22,16 @@ export function CustomerForm({
   compact = false,
 }: {
   customer?: CustomerView;
-  onSaved: (saved: { id: string; businessName: string }) => void;
+  onSaved: (saved: SavedCustomer) => void;
   /** Only the essential fields (for quick add). */
   compact?: boolean;
 }) {
   const m = useMessages();
   const action = customer ? updateCustomerAction.bind(null, customer.id) : createCustomerAction;
-  const { pending, errorFor, formProps } = useServerForm<
-    { id: string; businessName: string } | undefined
-  >(action, {
+  const { pending, errorFor, formProps } = useServerForm<SavedCustomer | undefined>(action, {
     schema: customerSchema,
     onSuccess: (result) => {
-      if (customer) onSaved({ id: customer.id, businessName: customer.businessName });
+      if (customer) onSaved(customer);
       else if (result.data) onSaved(result.data);
     },
   });

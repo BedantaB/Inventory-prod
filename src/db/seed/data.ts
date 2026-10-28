@@ -234,9 +234,17 @@ function lowStockLevel(unit: Unit): number {
   return unit === "pcs" ? 50 : unit === "jar" ? 2 : 10;
 }
 
+/** Short colour codes for SKUs (DOMS-002-BLK). */
+const COLOUR_CODES: Record<string, string> = {
+  Black: "BLK", Blue: "BLU", Red: "RED", Green: "GRN", White: "WHT", Yellow: "YEL",
+  "Light Green": "LGR", "Sap Green": "SGR", Orange: "ORG", Silver: "SLV", Golden: "GLD",
+  Brown: "BRN", Pink: "PNK",
+};
+
 function buildItem(row: Row, variant?: string): SeedItem {
   const [no, name, packSize, mrp, unit, category] = row;
-  const sku = `DOMS-${String(no).padStart(3, "0")}${variant ? `-${variant.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}` : ""}`;
+  const code = variant ? (COLOUR_CODES[variant] ?? variant.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()) : null;
+  const sku = `DOMS-${String(no).padStart(3, "0")}${code ? `-${code}` : ""}`;
   const cost = round2(mrp * 0.7);
   const low = lowStockLevel(unit);
   let buys: SeedItem["buys"] = [["opening", openingQty(no, unit), cost]];
@@ -284,6 +292,34 @@ export const seedVendors = [
   { businessName: "Sen Stationery", contactPerson: "Rupa Sen", phone: "9436045670", city: "Sabroom", address: "Main Bazar" },
   { businessName: "Banik Book Corner", contactPerson: "Amit Banik", phone: "9862056780", city: "Amarpur", address: "School Road" },
 ] as const;
+
+/**
+ * Past orders, created through the real checkout (oldest first, mixed in with the stock bills).
+ * [SKU, quantity]; prices are each item's usual selling price.
+ */
+export const seedOrders: {
+  daysAgo: number;
+  hour: number;
+  customer: (typeof seedVendors)[number]["businessName"];
+  by: "owner" | "ramesh" | "sunita";
+  discount?: { kind: "AMOUNT" | "PERCENT"; value: number };
+  lines: [string, number][];
+}[] = [
+  { daysAgo: 26, hour: 11, customer: "Sarkar Book Stall", by: "owner", lines: [["DOMS-013", 40], ["DOMS-002-BLU", 20], ["DOMS-121", 30]] },
+  { daysAgo: 24, hour: 12, customer: "Das Stationers", by: "ramesh", lines: [["DOMS-003-BLK", 24], ["DOMS-003-BLU", 24], ["DOMS-094", 20]] },
+  { daysAgo: 21, hour: 15, customer: "Debnath Book House", by: "sunita", discount: { kind: "PERCENT", value: 500 }, lines: [["DOMS-025", 4], ["DOMS-034", 3], ["DOMS-012", 30]] },
+  { daysAgo: 19, hour: 10, customer: "Saha Stationery", by: "ramesh", lines: [["DOMS-100-BLU", 50], ["DOMS-100-BLK", 30], ["DOMS-085", 40]] },
+  { daysAgo: 16, hour: 16, customer: "Ghosh Paper House", by: "owner", discount: { kind: "AMOUNT", value: 5000 }, lines: [["DOMS-124", 20], ["DOMS-005", 25]] },
+  { daysAgo: 13, hour: 11, customer: "Chakraborty Stores", by: "sunita", lines: [["DOMS-002-BLK", 15], ["DOMS-002-RED", 10], ["DOMS-013", 20]] },
+  { daysAgo: 11, hour: 13, customer: "Sarkar Book Stall", by: "ramesh", lines: [["DOMS-094", 15], ["DOMS-121", 20], ["DOMS-100-RED", 20]] },
+  { daysAgo: 9, hour: 12, customer: "Roy Stationery Mart", by: "sunita", lines: [["DOMS-034", 2], ["DOMS-025", 3]] },
+  { daysAgo: 6, hour: 17, customer: "Bhowmik Book Centre", by: "ramesh", lines: [["DOMS-003-RED", 12], ["DOMS-003-GRN", 12], ["DOMS-004-BLU", 6]] },
+  { daysAgo: 4, hour: 10, customer: "Paul Book Depot", by: "owner", discount: { kind: "PERCENT", value: 1000 }, lines: [["DOMS-124", 15], ["DOMS-012", 25]] },
+  { daysAgo: 3, hour: 14, customer: "Das Stationers", by: "sunita", lines: [["DOMS-085", 30], ["DOMS-005", 20]] },
+  { daysAgo: 1, hour: 11, customer: "Majumder Enterprises", by: "ramesh", lines: [["DOMS-100-BLU", 40], ["DOMS-104-BLU", 40]] },
+  { daysAgo: 0, hour: -2, customer: "Sarkar Book Stall", by: "ramesh", lines: [["DOMS-013", 30], ["DOMS-002-BLU", 10]] },
+  { daysAgo: 0, hour: -1, customer: "Dey Stationers", by: "sunita", lines: [["DOMS-094", 10], ["DOMS-121", 25]] },
+];
 
 export const seedUsers = [
   { key: "owner", username: "owner", fullName: "Shop Owner", role: "ADMIN" },

@@ -61,7 +61,7 @@ describe("listItems", () => {
     ]);
     expect(await skus("glue 45")).toEqual(["DOMS-006"]);
     expect(await skus("oil pastels 25 shades")).toEqual(["DOMS-036", "DOMS-037"]);
-    expect(await skus("doms-096-gol")).toEqual(["DOMS-096-GOL"]);
+    expect(await skus("doms-096-gld")).toEqual(["DOMS-096-GLD"]);
     expect((await listItems(db, { q: "doms" })).total).toBe(seedItems.length);
     expect((await listItems(db, { q: "zzz" })).total).toBe(0);
   });

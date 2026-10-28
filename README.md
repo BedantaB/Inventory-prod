@@ -90,6 +90,7 @@ The sample data is the DOMS stationery price list:
 - MRP comes from the list. Selling price is 85% of MRP and cost is 70% of MRP; both are
   made-up numbers.
 - 15 customers in Tripura.
+- 14 past orders, including 2 from today.
 
 Run `pnpm db:seed --reset` at any time to wipe the items, customers, stock and orders and
 reload the sample data. Logins are kept.

@@ -77,6 +77,13 @@ e2e/                Playwright flows
 - **"Add new" forms:**
   - Wrap them in `<FreshForm>` so they start empty after a save. Next keeps visited pages alive,
     so without it the saved values would still show.
+- **Cart:**
+  - The cart is a DRAFT order saved in the background (`useBackgroundSave` in `cart-editor.tsx`).
+  - Checkout (`checkoutDraft` in `features/orders/data.ts`) is the only path to a completed
+    order. It locks the draft and the item rows (id order) and rejects the whole order if
+    anything is short.
+- **Search pickers:** `<SearchCombobox>` is the shared search-as-you-type list (items,
+  customers).
 - **Choosing an item:** `<ItemPicker>` (search as you type, keyboard accessible), backed by
   `searchItemsAction`.
 - **Destructive actions:** `<ConfirmAction>`.

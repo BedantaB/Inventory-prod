@@ -16,7 +16,9 @@ test("staff find a customer by phone number and can call them", async ({ page })
     "tel:+919436012345",
   );
   await page.getByRole("link", { name: /^Sarkar Book Stall/ }).click();
-  await expect(page.getByText("No orders yet")).toBeVisible();
+  // Sample data has orders for this shop.
+  await expect(page.getByRole("link", { name: /^Orders: \d+ · ₹/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /ORD-\d{4}-\d{2}-\d{5}/ }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive customer" })).toHaveCount(0);
 });
 

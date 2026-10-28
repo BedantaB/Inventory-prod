@@ -13,7 +13,7 @@ import { getMessages } from "@/i18n";
 export default function AppLayout({ children }: LayoutProps<"/">) {
   const m = getMessages();
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr]">
+    <div className="min-h-dvh md:grid md:grid-cols-[15rem_1fr] print:block">
       <a
         href="#main"
         className="sr-only z-50 rounded-lg bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
@@ -25,7 +25,10 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <SidebarWithUser />
         </Suspense>
       </aside>
-      <main id="main" className="mx-auto w-full max-w-6xl px-4 pt-5 pb-28 md:px-8 md:py-8">
+      <main
+        id="main"
+        className="mx-auto w-full max-w-6xl px-4 pt-5 pb-28 md:px-8 md:py-8 print:max-w-none print:p-0"
+      >
         {children}
       </main>
       <Suspense fallback={<BottomNavSkeleton />}>

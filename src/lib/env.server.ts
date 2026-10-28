@@ -8,6 +8,10 @@ const schema = z.object({
   SUPABASE_SECRET_KEY: z.string().min(1),
   NEXT_PUBLIC_SITE_URL: z.url().default("http://localhost:3000"),
   STAFF_EMAIL_DOMAIN: z.string().min(3).default("staff.inventory.app"),
+  // Printed at the top of orders.
+  BUSINESS_NAME: z.string().default("Inventory"),
+  BUSINESS_ADDRESS: z.string().default(""),
+  BUSINESS_PHONE: z.string().default(""),
 });
 
 let cached: z.infer<typeof schema> | undefined;

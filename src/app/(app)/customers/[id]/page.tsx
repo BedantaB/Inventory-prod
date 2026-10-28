@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
+import { startOrderAction } from "@/features/orders/actions";
+import { StartOrderButton } from "@/features/orders/components/start-order-button";
 import { CustomerArchiveAction } from "@/features/customers/components/customer-archive-action";
 import { getCustomer, listCustomerOrders } from "@/features/customers/queries";
 import { format, getMessages } from "@/i18n";
@@ -73,6 +75,11 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
       )}
 
       <div className="grid max-w-3xl gap-6">
+        {!customer.archivedAt && (
+          <form action={startOrderAction.bind(null, customer.id)}>
+            <StartOrderButton label={m.orders.newForCustomer} />
+          </form>
+        )}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">{m.customers.details}</CardTitle>
@@ -104,10 +111,13 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
               {m.customers.orderHistory}
             </h2>
             {history.total > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <Link
+                href={`/orders?customer=${customer.id}`}
+                className="text-sm text-primary hover:underline"
+              >
                 {format(m.customers.ordersCount, { count: history.total })} ·{" "}
                 {formatINR(history.totalPaise)}
-              </p>
+              </Link>
             )}
           </div>
           {history.rows.length === 0 ? (

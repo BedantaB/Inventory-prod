@@ -79,8 +79,22 @@ export async function cleanupTestData() {
     // Test cleanup on the DEV database switches that guard off for a moment, only to remove
     // rows belonging to "E2E" items, inside one transaction.
     await sql.begin(async (tx) => {
+      // Orders for E2E customers or with E2E items (completed ones included).
+      const orderIds = (
+        await tx<{ id: string }[]>`
+          SELECT id FROM orders WHERE vendor_id IN (SELECT id FROM vendors WHERE business_name LIKE 'E2E %')
+          UNION
+          SELECT order_id FROM order_lines WHERE item_id IN (SELECT id FROM items WHERE name LIKE 'E2E %')`
+      ).map((r) => r.id);
       await tx`ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_immutable`;
-      await tx`DELETE FROM stock_movements WHERE item_id IN (SELECT id FROM items WHERE name LIKE 'E2E %')`;
+      await tx`ALTER TABLE orders DISABLE TRIGGER protect_completed_orders`;
+      await tx`ALTER TABLE order_lines DISABLE TRIGGER protect_completed_order_lines`;
+      await tx`DELETE FROM stock_movements WHERE order_id = ANY(${orderIds}::uuid[])
+                 OR item_id IN (SELECT id FROM items WHERE name LIKE 'E2E %')`;
+      await tx`DELETE FROM order_lines WHERE order_id = ANY(${orderIds}::uuid[])`;
+      await tx`DELETE FROM orders WHERE id = ANY(${orderIds}::uuid[])`;
+      await tx`ALTER TABLE order_lines ENABLE TRIGGER protect_completed_order_lines`;
+      await tx`ALTER TABLE orders ENABLE TRIGGER protect_completed_orders`;
       await tx`ALTER TABLE stock_movements ENABLE TRIGGER stock_movements_immutable`;
       await tx`DELETE FROM stock_entries e WHERE NOT EXISTS (SELECT 1 FROM stock_movements m WHERE m.stock_entry_id = e.id)`;
       await tx`DELETE FROM items WHERE name LIKE 'E2E %'`;
@@ -106,8 +120,15 @@ export function testPng(): { name: string; mimeType: string; buffer: Buffer } {
   };
 }
 
-/** Creates a throwaway item straight in the database (faster than the form). */
-export async function createTestItem(name: string, unit = "pcs"): Promise<string> {
+/**
+ * Creates a throwaway item straight in the database (faster than the form):
+ * MRP ₹25, usual price ₹20, and optionally some stock at a cost.
+ */
+export async function createTestItem(
+  name: string,
+  unit = "pcs",
+  stock?: { qty: number; costPaise: number },
+): Promise<string> {
   const { default: postgres } = await import("postgres");
   const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
   try {
@@ -117,6 +138,32 @@ export async function createTestItem(name: string, unit = "pcs"): Promise<string
       FROM units u, profiles p
       WHERE u.name = ${unit} AND p.role = 'ADMIN'
       LIMIT 1
+      RETURNING id`;
+    if (stock) {
+      await sql.begin(async (tx) => {
+        const [entry] = await tx<{ id: string }[]>`
+          INSERT INTO stock_entries (reference, created_by)
+          SELECT 'E2E', id FROM profiles WHERE role = 'ADMIN' LIMIT 1 RETURNING id`;
+        await tx`
+          INSERT INTO stock_movements (type, item_id, quantity_change, unit_cost_paise, stock_entry_id, created_by)
+          SELECT 'IN', ${row.id}, ${stock.qty}, ${stock.costPaise}, ${entry.id}, id
+          FROM profiles WHERE role = 'ADMIN' LIMIT 1`;
+      });
+    }
+    return row.id;
+  } finally {
+    await sql.end();
+  }
+}
+
+/** A throwaway customer (business name starts with "E2E "). */
+export async function createTestCustomer(name: string): Promise<string> {
+  const { default: postgres } = await import("postgres");
+  const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
+  try {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO vendors (business_name, phone, city, created_by)
+      SELECT ${name}, '+919800000000', 'Agartala', id FROM profiles WHERE role = 'ADMIN' LIMIT 1
       RETURNING id`;
     return row.id;
   } finally {

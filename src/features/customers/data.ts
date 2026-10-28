@@ -82,7 +82,12 @@ export async function createCustomer(db: Database, input: CustomerInput, actorId
   const [row] = await db
     .insert(vendors)
     .values({ ...input, createdBy: actorId })
-    .returning({ id: vendors.id, businessName: vendors.businessName });
+    .returning({
+      id: vendors.id,
+      businessName: vendors.businessName,
+      phone: vendors.phone,
+      city: vendors.city,
+    });
   return row;
 }
 
