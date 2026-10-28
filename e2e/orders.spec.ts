@@ -200,5 +200,13 @@ test("orders list filters by date and opens from the customer page", async ({ pa
   await page.goto("/customers?q=sarkar");
   await page.getByRole("link", { name: /^Sarkar Book Stall/ }).click();
   await page.getByRole("link", { name: /^Orders: \d+ · ₹/ }).click();
-  await expect(page.getByRole("button", { name: /Customer: Sarkar Book Stall/ })).toBeVisible();
+  await expect(page.getByText("Customer: Sarkar Book Stall")).toBeVisible();
+  await expect(
+    page
+      .getByRole("link", { name: /^Sarkar Book Stall/ })
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Show all customers" }).click();
+  await expect(page).toHaveURL(/\/orders$/);
 });

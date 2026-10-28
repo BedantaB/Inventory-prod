@@ -89,12 +89,17 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {customer && (
-            <Button variant="secondary" size="sm" asChild>
-              <Link href="/orders" aria-label={m.orders.clearCustomer}>
-                {format(m.orders.customerFilter, { name: customer.businessName })}
-                <XIcon aria-hidden />
+            // The chip says which customer is shown; the ✕ is its own link to show everyone.
+            <span className="inline-flex items-center rounded-lg bg-secondary pl-3 text-sm font-medium">
+              {format(m.orders.customerFilter, { name: customer.businessName })}
+              <Link
+                href="/orders"
+                aria-label={m.orders.clearCustomer}
+                className="flex size-11 items-center justify-center rounded-lg hover:bg-background"
+              >
+                <XIcon className="size-4" aria-hidden />
               </Link>
-            </Button>
+            </span>
           )}
           <p className="text-base font-medium" aria-live="polite">
             {format(m.orders.summary, { count: list.total, total: formatINR(list.totalPaise) })}
