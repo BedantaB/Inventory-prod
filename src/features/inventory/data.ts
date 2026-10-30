@@ -3,6 +3,7 @@ import { items, orders, profiles, stockEntries, stockMovements, units } from "@/
 import type { Database } from "@/db/types";
 import { PAGE_SIZE } from "@/lib/list-params";
 import { qtyFromDb, qtyToDb, QTY_SCALE } from "@/lib/qty";
+import type { AdjustReason } from "./schemas";
 
 // Stock-in ("Add Stock") and stock history. Takes `db` so it can be tested with PGlite.
 
@@ -70,6 +71,56 @@ export async function createStockEntry(
   });
 }
 
+export type CorrectStockResult =
+  | { status: "corrected"; changeMilli: number; stockAfterMilli: number }
+  | { status: "unchanged" }
+  | { status: "not-found" }
+  | { status: "archived" }
+  | { status: "decimal-not-allowed" };
+
+/**
+ * "Correct stock" (owner): sets the item's stock to what was counted, by writing ONE ADJUST
+ * movement for the difference. The item row is locked first, so a sale at the same moment
+ * can't slip in between reading the stock and writing the correction. Average cost stays.
+ */
+export async function correctStock(
+  db: Database,
+  shopId: string,
+  input: { itemId: string; countedMilli: number; reason: AdjustReason; note: string | null },
+  actorId: string,
+): Promise<CorrectStockResult> {
+  return db.transaction(async (tx) => {
+    const [item] = await tx
+      .select({
+        currentStock: items.currentStock,
+        archivedAt: items.archivedAt,
+        allowsDecimal: units.allowsDecimal,
+      })
+      .from(items)
+      .innerJoin(units, eq(items.unitId, units.id))
+      .where(and(eq(items.shopId, shopId), eq(items.id, input.itemId)))
+      .for("update", { of: items });
+    if (!item) return { status: "not-found" };
+    if (item.archivedAt) return { status: "archived" };
+    if (!item.allowsDecimal && input.countedMilli % QTY_SCALE !== 0) {
+      return { status: "decimal-not-allowed" };
+    }
+
+    const changeMilli = input.countedMilli - qtyFromDb(item.currentStock);
+    if (changeMilli === 0) return { status: "unchanged" };
+    await tx.insert(stockMovements).values({
+      shopId,
+      type: "ADJUST",
+      itemId: input.itemId,
+      quantityChange: qtyToDb(changeMilli),
+      reason: input.reason,
+      note: input.note,
+      createdBy: actorId,
+    });
+    return { status: "corrected", changeMilli, stockAfterMilli: input.countedMilli };
+  });
+}
+
 export async function getStockEntry(db: Database, shopId: string, id: string) {
   const [entry] = await db
     .select({
@@ -125,6 +176,7 @@ export async function listItemMovements(db: Database, shopId: string, itemId: st
         stockAfter: stockMovements.stockAfter,
         unitCostPaise: stockMovements.unitCostPaise,
         unitPricePaise: stockMovements.unitPricePaise,
+        reason: stockMovements.reason,
         note: stockMovements.note,
         createdAt: stockMovements.createdAt,
         createdByName: profiles.fullName,

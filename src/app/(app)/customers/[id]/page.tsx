@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,7 +116,7 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
                 href={`/orders?customer=${customer.id}`}
                 className="text-sm text-primary hover:underline"
               >
-                {format(m.customers.ordersCount, { count: history.total })} ·{" "}
+                {format(m.customers.ordersCount, { count: history.completed })} ·{" "}
                 {formatINR(history.totalPaise)}
               </Link>
             )}
@@ -135,12 +136,27 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
                     className="flex min-h-14 items-center justify-between gap-3 px-4 py-3 hover:bg-secondary"
                   >
                     <span className="flex flex-col">
-                      <span className="font-semibold">{order.orderNumber}</span>
+                      <span className="flex items-center gap-2 font-semibold">
+                        {order.orderNumber}
+                        {order.status === "CANCELLED" && (
+                          <Badge variant="outline" className="border-destructive text-destructive">
+                            {m.orders.cancelledBadge}
+                          </Badge>
+                        )}
+                      </span>
                       <span className="text-sm text-muted-foreground">
                         {order.completedAt ? formatDate(order.completedAt) : ""}
                       </span>
                     </span>
-                    <span className="font-semibold">{formatINR(order.totalPaise ?? 0)}</span>
+                    <span
+                      className={
+                        order.status === "CANCELLED"
+                          ? "text-muted-foreground line-through"
+                          : "font-semibold"
+                      }
+                    >
+                      {formatINR(order.totalPaise ?? 0)}
+                    </span>
                   </Link>
                 </li>
               ))}

@@ -8,6 +8,7 @@ export function SubmitButton({
   pendingLabel,
   className,
   size = "lg",
+  variant,
   icon,
 }: {
   pending: boolean;
@@ -15,10 +16,18 @@ export function SubmitButton({
   pendingLabel: string;
   className?: string;
   size?: "default" | "lg";
+  variant?: "default" | "destructive";
   icon?: React.ReactNode;
 }) {
   return (
-    <Button type="submit" size={size} disabled={pending} aria-busy={pending} className={className}>
+    <Button
+      type="submit"
+      size={size}
+      variant={variant}
+      disabled={pending}
+      aria-busy={pending}
+      className={className}
+    >
       {pending ? <Loader2Icon className="animate-spin" aria-hidden /> : icon}
       {pending ? pendingLabel : label}
     </Button>

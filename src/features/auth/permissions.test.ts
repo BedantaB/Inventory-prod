@@ -8,6 +8,9 @@ const all: Permission[] = [
   "viewCost",
   "manageUnits",
   "importItems",
+  "manageShop",
+  "correctStock",
+  "cancelOrder",
 ];
 
 describe("can", () => {

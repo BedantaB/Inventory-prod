@@ -4,6 +4,7 @@ export const DB_ERROR = {
   insufficientStock: "IV002",
   ledgerImmutable: "IV003",
   orderCompleted: "IV004",
+  returnNeedsCancelledOrder: "IV006",
   uniqueViolation: "23505",
   checkViolation: "23514",
   foreignKeyViolation: "23503",

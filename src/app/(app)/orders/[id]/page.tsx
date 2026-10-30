@@ -65,6 +65,7 @@ async function Order({ params, searchParams }: PageProps<"/orders/[id]">) {
         order={order}
         justCompleted={sp.done === "1"}
         canArchive={can(user, "archive")}
+        canCancel={can(user, "cancelOrder")}
         business={{
           name: shop?.name ?? user.shopName,
           address: shop?.address ?? "",

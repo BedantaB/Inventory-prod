@@ -58,3 +58,35 @@ export const stockEntrySchema = z.object({
 });
 
 export type StockEntryInput = z.infer<typeof stockEntrySchema>;
+
+export const ADJUST_REASONS = ["COUNT", "DAMAGED", "LOST", "OTHER"] as const;
+export type AdjustReason = (typeof ADJUST_REASONS)[number];
+
+/**
+ * "Correct stock" (owner): the quantity actually on the shelf, and why it differs.
+ * Whole numbers vs decimals is checked on the server against the item's unit.
+ */
+export const correctStockSchema = z
+  .object({
+    counted: z
+      .string({ error: "validation.required" })
+      .trim()
+      .min(1, { error: "validation.required" })
+      .refine((v) => parseQty(v, { allowDecimal: true }) !== null, {
+        error: "stock.invalidCount",
+      })
+      .transform((v) => parseQty(v, { allowDecimal: true })!),
+    reason: z.enum(ADJUST_REASONS, { error: "stock.chooseReason" }),
+    note: z
+      .string()
+      .trim()
+      .max(300, { error: "validation.tooLong" })
+      .optional()
+      .transform((v) => (v ? v : null)),
+  })
+  .refine((v) => v.reason !== "OTHER" || v.note !== null, {
+    path: ["note"],
+    error: "stock.noteRequired",
+  });
+
+export type CorrectStockInput = z.infer<typeof correctStockSchema>;

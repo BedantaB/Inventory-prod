@@ -16,11 +16,13 @@ import { ListSkeleton } from "@/components/list-skeleton";
 import { PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { SearchBox } from "@/components/search-box";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { getCustomer } from "@/features/customers/queries";
+import { ORDER_STATUS_FILTERS } from "@/features/orders/data";
 import { listOrders } from "@/features/orders/queries";
 import { format, getMessages } from "@/i18n";
 import { formatDateTime, istDayStart, nextDay } from "@/lib/dates";
@@ -73,6 +75,7 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
     customerId,
     from,
     to: toStart ? nextDay(toStart) : undefined,
+    status: parseChoice(sp.status, ORDER_STATUS_FILTERS, "all"),
     page: parsePage(sp.page),
     archived:
       canSeeArchived &&
@@ -82,7 +85,9 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
     listOrders(user.shopId, params),
     customerId ? getCustomer(user.shopId, customerId) : null,
   ]);
-  const filtered = Boolean(params.q || customerId || from || toStart || params.archived);
+  const filtered = Boolean(
+    params.q || customerId || from || toStart || params.archived || params.status !== "all",
+  );
 
   return (
     <>
@@ -102,22 +107,42 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
             </span>
           )}
           <p className="text-base font-medium" aria-live="polite">
-            {format(m.orders.summary, { count: list.total, total: formatINR(list.totalPaise) })}
+            {format(m.orders.summary, { count: list.completed, total: formatINR(list.totalPaise) })}
+            {list.cancelled > 0 && (
+              <span className="font-normal text-muted-foreground">
+                {" · "}
+                {format(m.orders.summaryCancelled, { count: list.cancelled })}
+              </span>
+            )}
           </p>
         </div>
-        {canSeeArchived && (
+        <div className="flex flex-col gap-2 sm:flex-row">
           <div className="sm:w-56">
             <FilterSelect
-              param="view"
-              label={m.list.filters}
-              defaultValue="active"
+              param="status"
+              label={m.orders.statusFilter}
+              defaultValue="all"
               options={[
-                { value: "active", label: m.orders.showActive },
-                { value: "archived", label: m.orders.showArchived },
+                { value: "all", label: m.orders.statusAll },
+                { value: "completed", label: m.orders.statusCompleted },
+                { value: "cancelled", label: m.orders.statusCancelled },
               ]}
             />
           </div>
-        )}
+          {canSeeArchived && (
+            <div className="sm:w-56">
+              <FilterSelect
+                param="view"
+                label={m.list.filters}
+                defaultValue="active"
+                options={[
+                  { value: "active", label: m.orders.showActive },
+                  { value: "archived", label: m.orders.showArchived },
+                ]}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {list.rows.length === 0 ? (
@@ -135,8 +160,15 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
                 className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-secondary"
               >
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-base font-semibold sm:text-lg">
-                    {order.customerName}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-base font-semibold sm:text-lg">
+                      {order.customerName}
+                    </span>
+                    {order.status === "CANCELLED" && (
+                      <Badge variant="outline" className="border-destructive text-destructive">
+                        {m.orders.cancelledBadge}
+                      </Badge>
+                    )}
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {order.orderNumber} · {formatDateTime(order.completedAt)}
@@ -145,7 +177,13 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
                     {format(m.orders.linesCount, { count: order.lineCount })}
                   </span>
                 </span>
-                <span className="text-lg font-bold whitespace-nowrap">
+                <span
+                  className={
+                    order.status === "CANCELLED"
+                      ? "text-lg whitespace-nowrap text-muted-foreground line-through"
+                      : "text-lg font-bold whitespace-nowrap"
+                  }
+                >
                   {formatINR(order.totalPaise)}
                 </span>
                 <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden />

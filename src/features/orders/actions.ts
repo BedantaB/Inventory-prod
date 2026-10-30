@@ -7,7 +7,7 @@ import { getDb } from "@/db";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { MAX_PRICE_PAISE } from "@/features/items/schemas";
-import { failure, success, type ActionResult, type Message } from "@/lib/forms";
+import { failure, parseForm, success, type ActionResult, type Message } from "@/lib/forms";
 import { rupeesToPaise } from "@/lib/money";
 import { parseQty } from "@/lib/qty";
 import * as data from "./data";
@@ -166,4 +166,41 @@ export async function setOrderArchivedAction(
   return success(archived ? "orders.archivedDone" : "orders.unarchivedDone", {
     number: order.orderNumber ?? "",
   });
+}
+
+const cancelOrderSchema = z.object({
+  reason: z
+    .string({ error: "validation.required" })
+    .trim()
+    .min(1, { error: "orders.cancelReasonRequired" })
+    .max(300, { error: "validation.tooLong" }),
+});
+
+/** Cancel a completed order (owner): the stock goes back; the order stays, marked Cancelled. */
+export async function cancelOrderAction(
+  orderId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await requireUser();
+  if (!can(actor, "cancelOrder")) return failure("errors.adminOnly");
+  if (!isUuid(orderId)) return notFound();
+  const parsed = parseForm(cancelOrderSchema, formData);
+  if (!parsed.ok) return parsed.result;
+
+  const result = await data.cancelOrder(
+    getDb(),
+    actor.shopId,
+    orderId,
+    parsed.data.reason,
+    actor.id,
+  );
+  if (result.status === "not-found") return notFound();
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/items");
+  revalidatePath("/");
+  return success(
+    result.status === "cancelled" ? "orders.cancelledDone" : "orders.alreadyCancelled",
+    { number: result.orderNumber },
+  );
 }

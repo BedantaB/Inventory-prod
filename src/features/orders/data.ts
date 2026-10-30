@@ -10,6 +10,7 @@ import {
   isNull,
   lt,
   max,
+  ne,
   or,
   sql,
   type SQL,
@@ -24,6 +25,7 @@ import {
   units,
   vendors,
 } from "@/db/schema";
+import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "@/db/types";
 import { itemDisplayName } from "@/features/items/data";
 import { financialYear, formatOrderNumber } from "@/lib/financial-year";
@@ -550,6 +552,9 @@ export async function checkoutDraft(
 // Completed orders
 // ---------------------------------------------------------------------------------------------
 
+const cancelledByProfile = alias(profiles, "cancelled_by_profile");
+
+/** A completed or cancelled order (drafts are shown by getDraft). */
 export async function getOrder(db: Database, shopId: string, orderId: string, showCost: boolean) {
   const [order] = await db
     .select({
@@ -564,6 +569,9 @@ export async function getOrder(db: Database, shopId: string, orderId: string, sh
       completedAt: orders.completedAt,
       archivedAt: orders.archivedAt,
       completedByName: profiles.fullName,
+      cancelledAt: orders.cancelledAt,
+      cancelReason: orders.cancelReason,
+      cancelledByName: cancelledByProfile.fullName,
       customerId: vendors.id,
       customerName: vendors.businessName,
       customerPhone: vendors.phone,
@@ -573,7 +581,8 @@ export async function getOrder(db: Database, shopId: string, orderId: string, sh
     .from(orders)
     .innerJoin(vendors, eq(orders.vendorId, vendors.id))
     .innerJoin(profiles, eq(orders.completedBy, profiles.id))
-    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), eq(orders.status, "COMPLETED")));
+    .leftJoin(cancelledByProfile, eq(orders.cancelledBy, cancelledByProfile.id))
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), ne(orders.status, "DRAFT")));
   if (!order) return null;
 
   const lines = await db
@@ -624,13 +633,98 @@ export async function setOrderArchived(
   const [row] = await db
     .update(orders)
     .set({ archivedAt: archived ? new Date() : null })
-    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), eq(orders.status, "COMPLETED")))
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), ne(orders.status, "DRAFT")))
     .returning({ id: orders.id, orderNumber: orders.orderNumber });
   return row ?? null;
 }
 
+export type CancelResult =
+  | { status: "cancelled"; orderNumber: string }
+  | { status: "already-cancelled"; orderNumber: string }
+  | { status: "not-found" };
+
+/**
+ * Cancels a completed order (owner), in ONE transaction:
+ *  1. lock the order (two people can't cancel it twice)
+ *  2. mark it CANCELLED with who, when and why — it keeps its number, so there are no gaps
+ *  3. lock the items (id order, like checkout, so the two can't deadlock)
+ *  4. write one RETURN movement per sold line, at the cost it was sold at: stock goes back
+ *     and the average cost is recalculated as if it had been bought back at that cost
+ * Cancelled orders no longer count as sales anywhere.
+ */
+export async function cancelOrder(
+  db: Database,
+  shopId: string,
+  orderId: string,
+  reason: string,
+  actorId: string,
+  at: Date = new Date(),
+): Promise<CancelResult> {
+  return db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ status: orders.status, orderNumber: orders.orderNumber })
+      .from(orders)
+      .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId)))
+      .for("update");
+    if (!order || order.status === "DRAFT") return { status: "not-found" };
+    if (order.status === "CANCELLED") {
+      return { status: "already-cancelled", orderNumber: order.orderNumber! };
+    }
+
+    await tx
+      .update(orders)
+      .set({ status: "CANCELLED", cancelledAt: at, cancelledBy: actorId, cancelReason: reason })
+      .where(eq(orders.id, orderId));
+
+    const sold = await tx
+      .select({
+        itemId: stockMovements.itemId,
+        quantityChange: stockMovements.quantityChange,
+        unitCostPaise: stockMovements.unitCostPaise,
+        unitPricePaise: stockMovements.unitPricePaise,
+      })
+      .from(stockMovements)
+      .where(
+        and(
+          eq(stockMovements.shopId, shopId),
+          eq(stockMovements.orderId, orderId),
+          eq(stockMovements.type, "OUT"),
+        ),
+      )
+      .orderBy(asc(stockMovements.seq));
+
+    const itemIds = [...new Set(sold.map((m) => m.itemId))].sort();
+    if (itemIds.length > 0) {
+      await tx
+        .select({ id: items.id })
+        .from(items)
+        .where(and(eq(items.shopId, shopId), inArray(items.id, itemIds)))
+        .orderBy(asc(items.id))
+        .for("update");
+    }
+    for (const movement of sold) {
+      await tx.insert(stockMovements).values({
+        shopId,
+        type: "RETURN",
+        itemId: movement.itemId,
+        quantityChange: qtyToDb(-qtyFromDb(movement.quantityChange)),
+        unitCostPaise: movement.unitCostPaise ?? 0,
+        unitPricePaise: movement.unitPricePaise,
+        orderId,
+        createdAt: at,
+        createdBy: actorId,
+      });
+    }
+    return { status: "cancelled", orderNumber: order.orderNumber! };
+  });
+}
+
+export const ORDER_STATUS_FILTERS = ["all", "completed", "cancelled"] as const;
+export type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
+
 export type OrderListParams = {
   q?: string;
+  status?: OrderStatusFilter;
   customerId?: string;
   from?: Date;
   /** Exclusive. */
@@ -639,12 +733,18 @@ export type OrderListParams = {
   archived?: boolean;
 };
 
-/** Completed orders, newest first. Search matches order number, customer name, phone or city. */
+/**
+ * Completed and cancelled orders, newest first. Search matches order number, customer name,
+ * phone or city. The summary counts completed orders only: cancelled ones are not sales.
+ */
 export async function listOrders(db: Database, shopId: string, params: OrderListParams) {
   const page = params.page ?? 1;
+  const status = params.status ?? "all";
   const conditions: (SQL | undefined)[] = [
     eq(orders.shopId, shopId),
-    eq(orders.status, "COMPLETED"),
+    status === "all"
+      ? ne(orders.status, "DRAFT")
+      : eq(orders.status, status === "completed" ? "COMPLETED" : "CANCELLED"),
     params.archived ? isNotNull(orders.archivedAt) : isNull(orders.archivedAt),
   ];
   for (const pattern of searchPatterns(params.q)) {
@@ -666,6 +766,7 @@ export async function listOrders(db: Database, shopId: string, params: OrderList
     db
       .select({
         id: orders.id,
+        status: orders.status,
         orderNumber: orders.orderNumber,
         completedAt: orders.completedAt,
         totalPaise: orders.totalPaise,
@@ -686,7 +787,13 @@ export async function listOrders(db: Database, shopId: string, params: OrderList
     db
       .select({
         total: sql<number>`count(*)`.mapWith(Number),
-        totalPaise: sql<number>`coalesce(sum(${orders.totalPaise}), 0)`.mapWith(Number),
+        completed: sql<number>`count(*) FILTER (WHERE ${orders.status} = 'COMPLETED')`.mapWith(
+          Number,
+        ),
+        totalPaise:
+          sql<number>`coalesce(sum(${orders.totalPaise}) FILTER (WHERE ${orders.status} = 'COMPLETED'), 0)`.mapWith(
+            Number,
+          ),
       })
       .from(orders)
       .innerJoin(vendors, eq(orders.vendorId, vendors.id))
@@ -695,6 +802,8 @@ export async function listOrders(db: Database, shopId: string, params: OrderList
   return {
     rows: rows.map((r) => ({ ...r, completedAt: r.completedAt!, totalPaise: r.totalPaise ?? 0 })),
     total: summary.total,
+    completed: summary.completed,
+    cancelled: summary.total - summary.completed,
     totalPaise: summary.totalPaise,
     page,
   };

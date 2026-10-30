@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
 import { items, orders, profiles, stockEntries, units, vendors } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { itemDisplayName } from "@/features/items/data";
@@ -96,6 +96,7 @@ export async function getDashboard(
     db
       .select({
         id: orders.id,
+        status: orders.status,
         at: orders.completedAt,
         orderNumber: orders.orderNumber,
         totalPaise: orders.totalPaise,
@@ -105,9 +106,8 @@ export async function getDashboard(
       .from(orders)
       .innerJoin(vendors, eq(orders.vendorId, vendors.id))
       .innerJoin(profiles, eq(orders.completedBy, profiles.id))
-      .where(
-        and(eq(orders.shopId, shopId), eq(orders.status, "COMPLETED"), isNull(orders.archivedAt)),
-      )
+      // Cancelled orders stay in the list (marked), but never count as sales above.
+      .where(and(eq(orders.shopId, shopId), ne(orders.status, "DRAFT"), isNull(orders.archivedAt)))
       .orderBy(desc(orders.completedAt))
       .limit(8),
   ]);
@@ -122,6 +122,7 @@ export async function getDashboard(
       byName: e.byName,
       lineCount: e.lineCount,
       totalPaise: null,
+      cancelled: false,
     })),
     ...recentOrders.map((o) => ({
       kind: "order" as const,
@@ -131,6 +132,7 @@ export async function getDashboard(
       byName: o.byName,
       customerName: o.customerName,
       totalPaise: o.totalPaise ?? 0,
+      cancelled: o.status === "CANCELLED",
     })),
   ]
     .sort((a, b) => b.at.getTime() - a.at.getTime())

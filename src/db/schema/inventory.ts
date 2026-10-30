@@ -15,7 +15,10 @@ import { createdBy, paise, quantity, shopRef, timestamps } from "./columns";
 import { items } from "./items";
 import { orders } from "./orders";
 
-export const movementType = pgEnum("movement_type", ["IN", "OUT", "ADJUST"]);
+export const movementType = pgEnum("movement_type", ["IN", "OUT", "ADJUST", "RETURN"]);
+
+/** Why the owner corrected the stock (ADJUST movements). OTHER needs a note. */
+export const adjustReason = pgEnum("adjust_reason", ["COUNT", "DAMAGED", "LOST", "OTHER"]);
 
 /** One "Add Stock" save (a supplier bill). Its lines are IN movements. */
 export const stockEntries = pgTable(
@@ -50,16 +53,20 @@ export const stockMovements = pgTable(
     type: movementType().notNull(),
     // Item, bill and order must belong to the same shop (composite foreign keys below).
     itemId: uuid().notNull(),
-    // Signed: IN > 0, OUT < 0, ADJUST either way.
+    // Signed: IN and RETURN > 0, OUT < 0, ADJUST either way.
     quantityChange: quantity().notNull(),
-    // IN: cost entered by the user. OUT: item's average cost at the moment of sale (set by trigger).
+    // IN: cost entered by the user. RETURN: the cost recorded when it was sold.
+    // OUT and ADJUST: the item's average cost at that moment (set by trigger).
     unitCostPaise: paise(),
-    // OUT: selling price.
+    // OUT and RETURN: selling price.
     unitPricePaise: paise(),
     // Stock level right after this movement (set by trigger).
     stockAfter: quantity().notNull().default("0"),
     stockEntryId: uuid(),
+    // OUT: the sale. RETURN: the cancelled order the stock came back from.
     orderId: uuid(),
+    // ADJUST only.
+    reason: adjustReason(),
     note: text(),
     // No updated_at / archived_at: ledger rows are immutable.
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -86,18 +93,27 @@ export const stockMovements = pgTable(
     index("stock_movements_created_idx").on(t.createdAt.desc()),
     index("stock_movements_stock_entry_idx").on(t.stockEntryId),
     index("stock_movements_order_idx").on(t.orderId),
+    // Compared as text: enum values added in a migration can't be used in the same transaction.
     check(
       "stock_movements_shape",
       sql`(
-        ${t.type} = 'IN' AND ${t.quantityChange} > 0 AND ${t.unitCostPaise} >= 0
+        ${t.type}::text = 'IN' AND ${t.quantityChange} > 0 AND ${t.unitCostPaise} >= 0
           AND ${t.stockEntryId} IS NOT NULL AND ${t.orderId} IS NULL
       ) OR (
-        ${t.type} = 'OUT' AND ${t.quantityChange} < 0 AND ${t.unitPricePaise} >= 0
+        ${t.type}::text = 'OUT' AND ${t.quantityChange} < 0 AND ${t.unitPricePaise} >= 0
           AND ${t.orderId} IS NOT NULL AND ${t.stockEntryId} IS NULL
       ) OR (
-        ${t.type} = 'ADJUST' AND ${t.quantityChange} <> 0
+        ${t.type}::text = 'ADJUST' AND ${t.quantityChange} <> 0
           AND ${t.orderId} IS NULL AND ${t.stockEntryId} IS NULL
+      ) OR (
+        ${t.type}::text = 'RETURN' AND ${t.quantityChange} > 0 AND ${t.unitCostPaise} >= 0
+          AND ${t.orderId} IS NOT NULL AND ${t.stockEntryId} IS NULL
       )`,
+    ),
+    check(
+      "stock_movements_reason",
+      sql`(${t.type}::text = 'ADJUST') = (${t.reason} IS NOT NULL)
+        AND (${t.reason}::text <> 'OTHER' OR nullif(btrim(${t.note}), '') IS NOT NULL)`,
     ),
   ],
 );

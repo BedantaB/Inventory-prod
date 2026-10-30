@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { Pagination } from "@/components/pagination";
+import { CorrectStockDialog } from "@/features/inventory/components/correct-stock-dialog";
 import { StockHistory } from "@/features/inventory/components/stock-history";
 import { listItemMovements } from "@/features/inventory/queries";
 import { ItemArchiveAction } from "@/features/items/components/item-archive-action";
@@ -140,12 +141,25 @@ async function ItemDetails({ params, searchParams }: PageProps<"/items/[id]">) {
               {m.stock.history}
             </h2>
             {!item.archivedAt && (
-              <Button variant="outline" asChild>
-                <Link href="/stock/new">
-                  <PackagePlusIcon aria-hidden />
-                  {m.nav.addStock}
-                </Link>
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                {can(user, "correctStock") && (
+                  <CorrectStockDialog
+                    item={{
+                      id: item.id,
+                      name: itemDisplayName(item),
+                      stockMilli: item.stockMilli,
+                      unitName: unit,
+                      allowsDecimal: item.unitAllowsDecimal,
+                    }}
+                  />
+                )}
+                <Button variant="outline" asChild>
+                  <Link href="/stock/new">
+                    <PackagePlusIcon aria-hidden />
+                    {m.nav.addStock}
+                  </Link>
+                </Button>
+              </div>
             )}
           </div>
           <StockHistory rows={history.rows} unit={unit} showCost={showCost} m={m} />

@@ -115,7 +115,7 @@ e2e/                Playwright flows
   including updates and deletes. Pass `actor.shopId` from `requireUser()`; never take a shop id
   from the client.
 - References between business tables are composite foreign keys `(shop_id, x_id) →
-  parent(shop_id, id)`, so the database rejects rows that mix shops. New tables follow the same
+parent(shop_id, id)`, so the database rejects rows that mix shops. New tables follow the same
   pattern and add `unique (shop_id, id)` if other tables reference them.
 - Names and numbers are unique **per shop** (SKUs, unit/category/brand names, order numbers,
   `order_counters`). Usernames are unique across all shops, because they are the login.
@@ -146,10 +146,19 @@ e2e/                Playwright flows
 - Stock-in (IN) needs `unit_cost_paise` and `stock_entry_id`. The weighted average cost is
   recalculated by the trigger.
 - Stock-out (OUT) needs `unit_price_paise` and `order_id`. The trigger records the average cost.
+- Correct stock (ADJUST, owner) needs a `reason` (`adjust_reason`; OTHER also needs a `note`).
+  The trigger records the average cost and leaves it unchanged. Use `correctStock()`.
+- RETURN puts stock back from a **cancelled** order, at the cost recorded on the sale (IV006
+  otherwise). Only `cancelOrder()` writes them.
 - Order ledger rows by `seq`, not by `created_at`: rows written in one transaction share
   `created_at`.
 - `stock_movements` rows are immutable (IV003). Completed orders are immutable except
-  `archived_at` (IV004).
+  `archived_at` and the one-way change to CANCELLED (with `cancelled_at/_by`, `cancel_reason`).
+  Cancelled orders are immutable too (IV004).
+- Sales totals count `status = 'COMPLETED'` only. Lists and history show cancelled orders,
+  marked; drafts never.
+- Enum values added in a migration can't be used in the same transaction (all pending
+  migrations run in one). Compare enums as `::text` in CHECKs and SQL in such migrations.
 - Map DB errors with `getPgErrorCode()` + `DB_ERROR` (`src/db/errors.ts`).
 
 **Server is the source of truth**

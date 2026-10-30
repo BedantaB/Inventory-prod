@@ -29,7 +29,12 @@ export function StockHistory({
     );
   }
 
-  const label = { IN: m.stock.typeIn, OUT: m.stock.typeOut, ADJUST: m.stock.typeAdjust } as const;
+  const label = {
+    IN: m.stock.typeIn,
+    OUT: m.stock.typeOut,
+    ADJUST: m.stock.typeAdjust,
+    RETURN: m.stock.typeReturn,
+  } as const;
 
   return (
     <ul className="flex flex-col divide-y rounded-xl border bg-card">
@@ -67,6 +72,17 @@ export function StockHistory({
               {row.type === "OUT" && row.unitPricePaise != null && (
                 <span className="text-sm text-muted-foreground">
                   {format(m.stock.priceEach, { price: formatINR(row.unitPricePaise) })}
+                </span>
+              )}
+              {row.type === "RETURN" && (
+                <span className="text-sm text-muted-foreground">
+                  {format(m.stock.returnedFrom, { number: row.orderNumber ?? "" })}
+                </span>
+              )}
+              {row.type === "ADJUST" && row.reason && (
+                <span className="text-sm">
+                  {m.stock[`reason${row.reason}`]}
+                  {row.note && <span className="text-muted-foreground"> · {row.note}</span>}
                 </span>
               )}
             </div>

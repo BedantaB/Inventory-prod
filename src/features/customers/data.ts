@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { orderLines, orders, vendors } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { PAGE_SIZE, searchPatterns } from "@/lib/list-params";
@@ -129,7 +129,10 @@ export async function setCustomerArchived(
   return row ?? null;
 }
 
-/** Completed orders for one customer, newest first. */
+/**
+ * One customer's orders (completed and cancelled), newest first. The summary counts completed
+ * orders only.
+ */
 export async function listCustomerOrders(
   db: Database,
   shopId: string,
@@ -139,12 +142,13 @@ export async function listCustomerOrders(
   const where = and(
     eq(orders.shopId, shopId),
     eq(orders.vendorId, customerId),
-    eq(orders.status, "COMPLETED"),
+    ne(orders.status, "DRAFT"),
   );
-  const [rows, [{ total, totalPaise }]] = await Promise.all([
+  const [rows, [{ total, completed, totalPaise }]] = await Promise.all([
     db
       .select({
         id: orders.id,
+        status: orders.status,
         orderNumber: orders.orderNumber,
         completedAt: orders.completedAt,
         totalPaise: orders.totalPaise,
@@ -160,10 +164,16 @@ export async function listCustomerOrders(
     db
       .select({
         total: sql<number>`count(*)`.mapWith(Number),
-        totalPaise: sql<number>`coalesce(sum(${orders.totalPaise}), 0)`.mapWith(Number),
+        completed: sql<number>`count(*) FILTER (WHERE ${orders.status} = 'COMPLETED')`.mapWith(
+          Number,
+        ),
+        totalPaise:
+          sql<number>`coalesce(sum(${orders.totalPaise}) FILTER (WHERE ${orders.status} = 'COMPLETED'), 0)`.mapWith(
+            Number,
+          ),
       })
       .from(orders)
       .where(where),
   ]);
-  return { rows, total, totalPaise, page };
+  return { rows, total, completed, totalPaise, page };
 }

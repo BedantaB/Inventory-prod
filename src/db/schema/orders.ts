@@ -17,13 +17,14 @@ import { items } from "./items";
 import { profiles } from "./profiles";
 import { vendors } from "./vendors";
 
-export const orderStatus = pgEnum("order_status", ["DRAFT", "COMPLETED"]);
+export const orderStatus = pgEnum("order_status", ["DRAFT", "COMPLETED", "CANCELLED"]);
 export const discountKind = pgEnum("discount_kind", ["AMOUNT", "PERCENT"]);
 
 /**
  * A DRAFT order is the cart (survives refresh). Checkout turns it into COMPLETED,
  * assigns order_number and fixes the totals. Completed orders cannot be changed
- * (trigger protect_completed_orders).
+ * (trigger protect_completed_orders), except that the owner may CANCEL one: the stock comes
+ * back (RETURN movements) and the order keeps its number. Cancelled orders are final.
  */
 export const orders = pgTable(
   "orders",
@@ -44,6 +45,9 @@ export const orders = pgTable(
     totalPaise: paise(),
     completedAt: timestamp({ withTimezone: true }),
     completedBy: uuid().references(() => profiles.id),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: uuid().references(() => profiles.id),
+    cancelReason: text(),
     ...archivedAt(),
     ...timestamps(),
     ...createdBy(),
@@ -72,6 +76,13 @@ export const orders = pgTable(
         AND ${t.completedAt} IS NOT NULL AND ${t.completedBy} IS NOT NULL
         AND ${t.subtotalPaise} IS NOT NULL AND ${t.discountPaise} IS NOT NULL
         AND ${t.totalPaise} IS NOT NULL
+      )`,
+    ),
+    check(
+      "orders_cancelled_fields",
+      sql`(${t.status}::text = 'CANCELLED') = (
+        ${t.cancelledAt} IS NOT NULL AND ${t.cancelledBy} IS NOT NULL
+        AND nullif(btrim(${t.cancelReason}), '') IS NOT NULL
       )`,
     ),
     check(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { zodFieldErrors } from "@/lib/forms";
-import { stockEntrySchema } from "./schemas";
+import { correctStockSchema, stockEntrySchema } from "./schemas";
 
 const itemId = "6f1b9c2e-8a1d-4c1e-9a4b-2f0d3c4b5a69";
 const lines = (value: unknown) => JSON.stringify(value);
@@ -48,5 +48,34 @@ describe("stockEntrySchema", () => {
       stockEntrySchema.safeParse({ lines: lines([{ itemId, quantity: "2", unitCost: "0" }]) })
         .success,
     ).toBe(true);
+  });
+});
+
+describe("correctStockSchema", () => {
+  const parse = (v: Record<string, string>) => correctStockSchema.safeParse(v);
+
+  it("reads the counted quantity in milli-units, 0 included", () => {
+    expect(parse({ counted: "12.5", reason: "COUNT" }).data).toEqual({
+      counted: 12_500,
+      reason: "COUNT",
+      note: null,
+    });
+    expect(parse({ counted: "0", reason: "LOST" }).data?.counted).toBe(0);
+  });
+
+  it("needs a valid count and a reason", () => {
+    expect(parse({ counted: "-1", reason: "COUNT" }).success).toBe(false);
+    expect(parse({ counted: "abc", reason: "COUNT" }).success).toBe(false);
+    expect(parse({ counted: "5" }).success).toBe(false);
+    expect(parse({ counted: "5", reason: "STOLEN" }).success).toBe(false);
+  });
+
+  it("needs a note for 'Other reason'", () => {
+    const missing = parse({ counted: "5", reason: "OTHER", note: " " });
+    expect(missing.error?.issues[0]).toMatchObject({
+      path: ["note"],
+      message: "stock.noteRequired",
+    });
+    expect(parse({ counted: "5", reason: "OTHER", note: "Sample to school" }).success).toBe(true);
   });
 });

@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { format, type Messages } from "@/i18n";
 import { formatDateTime } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
@@ -208,10 +209,17 @@ export function DashboardView({ data, m }: { data: Dashboard; m: Messages }) {
                       <PackagePlusIcon className="size-5 shrink-0 text-success" aria-hidden />
                     )}
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-medium">
-                        {event.kind === "order"
-                          ? format(m.home.recentOrder, { number: event.title ?? "" })
-                          : m.home.recentStock}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium">
+                          {event.kind === "order"
+                            ? format(m.home.recentOrder, { number: event.title ?? "" })
+                            : m.home.recentStock}
+                        </span>
+                        {event.cancelled && (
+                          <Badge variant="outline" className="border-destructive text-destructive">
+                            {m.orders.cancelledBadge}
+                          </Badge>
+                        )}
                       </span>
                       <span className="truncate text-sm text-muted-foreground">
                         {event.kind === "order"
@@ -230,7 +238,13 @@ export function DashboardView({ data, m }: { data: Dashboard; m: Messages }) {
                       </span>
                     </span>
                     {event.totalPaise !== null && (
-                      <span className="shrink-0 font-semibold whitespace-nowrap">
+                      <span
+                        className={
+                          event.cancelled
+                            ? "shrink-0 whitespace-nowrap text-muted-foreground line-through"
+                            : "shrink-0 font-semibold whitespace-nowrap"
+                        }
+                      >
                         {formatINR(event.totalPaise)}
                       </span>
                     )}

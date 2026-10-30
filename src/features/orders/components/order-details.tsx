@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, ShoppingCartIcon } from "lucide-react";
+import { BanIcon, CheckCircle2Icon, ShoppingCartIcon } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { formatPhone } from "@/lib/phone";
 import { formatQty } from "@/lib/qty";
 import type { OrderView } from "../data";
 import { percentToInput } from "../totals";
+import { CancelOrderDialog } from "./cancel-order-dialog";
 import { OrderArchiveAction } from "./order-archive-action";
 import { PrintButton } from "./print-button";
 
@@ -19,19 +20,37 @@ export function OrderDetails({
   order,
   justCompleted,
   canArchive,
+  canCancel,
   business,
   m,
 }: {
   order: OrderView;
   justCompleted: boolean;
   canArchive: boolean;
+  canCancel: boolean;
   business: { name: string; address: string; phone: string };
   m: Messages;
 }) {
   const number = order.orderNumber ?? "";
+  const cancelled = order.status === "CANCELLED";
   return (
     <div className="flex max-w-3xl flex-col gap-6 print:max-w-none print:gap-4">
-      {justCompleted && (
+      {cancelled && (
+        <Alert className="border-destructive print:hidden" role="status">
+          <BanIcon className="text-destructive" aria-hidden />
+          <AlertTitle className="text-lg">{m.orders.cancelledBadge}</AlertTitle>
+          <AlertDescription className="text-base">
+            <p>
+              {format(m.orders.cancelledNotice, {
+                date: order.cancelledAt ? formatDateTime(order.cancelledAt) : "",
+                name: order.cancelledByName ?? "",
+              })}
+            </p>
+            <p>{format(m.orders.cancelledReason, { reason: order.cancelReason ?? "" })}</p>
+          </AlertDescription>
+        </Alert>
+      )}
+      {justCompleted && !cancelled && (
         <Alert className="border-success print:hidden" role="status">
           <CheckCircle2Icon className="text-success" aria-hidden />
           <AlertTitle className="text-lg">{format(m.orders.completedTitle, { number })}</AlertTitle>
@@ -69,6 +88,11 @@ export function OrderDetails({
             <dd className="whitespace-nowrap">{formatDateTime(order.completedAt)}</dd>
           </dl>
         </header>
+        {cancelled && (
+          <p className="self-start rounded border-2 border-destructive px-3 py-1 text-xl font-bold tracking-widest text-destructive">
+            {m.orders.cancelledStamp}
+          </p>
+        )}
 
         <section>
           <h2 className="text-sm text-muted-foreground">{m.orders.billTo}</h2>
@@ -148,9 +172,16 @@ export function OrderDetails({
         </p>
       </article>
 
-      {canArchive && (
-        <div className="print:hidden">
-          <OrderArchiveAction id={order.id} number={number} archived={Boolean(order.archivedAt)} />
+      {(canCancel || canArchive) && (
+        <div className="flex flex-wrap gap-3 print:hidden">
+          {canCancel && !cancelled && <CancelOrderDialog id={order.id} number={number} />}
+          {canArchive && (
+            <OrderArchiveAction
+              id={order.id}
+              number={number}
+              archived={Boolean(order.archivedAt)}
+            />
+          )}
         </div>
       )}
     </div>
