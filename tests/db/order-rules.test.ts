@@ -2,19 +2,33 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
 import { DB_ERROR } from "@/db/errors";
-import { createItem, createTestDb, createUser, expectPgError, type TestDb } from "./test-db";
+import {
+  createItem,
+  createTestDb,
+  createUser,
+  defaultShopId,
+  expectPgError,
+  type TestDb,
+} from "./test-db";
 
 let db: TestDb;
+let shopId: string;
 let userId: string;
 let vendorId: string;
 let itemId: string;
 
 beforeAll(async () => {
   ({ db } = await createTestDb());
+  shopId = await defaultShopId(db);
   userId = (await createUser(db, { username: "owner", role: "ADMIN" })).id;
   const [vendor] = await db
     .insert(schema.vendors)
-    .values({ businessName: "Sharma Kirana Store", phone: "+919812345670", createdBy: userId })
+    .values({
+      shopId,
+      businessName: "Sharma Kirana Store",
+      phone: "+919812345670",
+      createdBy: userId,
+    })
     .returning();
   vendorId = vendor.id;
   itemId = (await createItem(db, userId, { name: "Atta 10 kg" })).id;
@@ -25,11 +39,12 @@ let orderCounter = 0;
 async function createCompletedOrder() {
   const [order] = await db
     .insert(schema.orders)
-    .values({ vendorId, createdBy: userId })
+    .values({ shopId, vendorId, createdBy: userId })
     .returning();
   const [line] = await db
     .insert(schema.orderLines)
     .values({
+      shopId,
       orderId: order.id,
       itemId,
       quantity: "1.000",
@@ -56,10 +71,13 @@ async function createCompletedOrder() {
 
 describe("draft orders", () => {
   it("can be edited and discarded", async () => {
-    const [draft] = await db.insert(schema.orders).values({ createdBy: userId }).returning();
+    const [draft] = await db
+      .insert(schema.orders)
+      .values({ shopId, createdBy: userId })
+      .returning();
     await db
       .insert(schema.orderLines)
-      .values({ orderId: draft.id, itemId, quantity: "2.000", createdBy: userId });
+      .values({ shopId, orderId: draft.id, itemId, quantity: "2.000", createdBy: userId });
     await db
       .update(schema.orders)
       .set({ discountValue: 500 })
@@ -74,7 +92,10 @@ describe("draft orders", () => {
   });
 
   it("cannot be completed without a number, customer and totals", async () => {
-    const [draft] = await db.insert(schema.orders).values({ createdBy: userId }).returning();
+    const [draft] = await db
+      .insert(schema.orders)
+      .values({ shopId, createdBy: userId })
+      .returning();
     await expectPgError(
       db.update(schema.orders).set({ status: "COMPLETED" }).where(eq(schema.orders.id, draft.id)),
       DB_ERROR.checkViolation,
@@ -84,7 +105,7 @@ describe("draft orders", () => {
   it("rejects totals that do not add up", async () => {
     const [draft] = await db
       .insert(schema.orders)
-      .values({ vendorId, createdBy: userId })
+      .values({ shopId, vendorId, createdBy: userId })
       .returning();
     await expectPgError(
       db
@@ -99,7 +120,7 @@ describe("draft orders", () => {
     await expectPgError(
       db
         .insert(schema.orders)
-        .values({ discountKind: "PERCENT", discountValue: 10_001, createdBy: userId }),
+        .values({ shopId, discountKind: "PERCENT", discountValue: 10_001, createdBy: userId }),
       DB_ERROR.checkViolation,
     );
   });
@@ -137,9 +158,13 @@ describe("completed orders", () => {
     );
     const otherItem = await createItem(db, userId, { name: "Maida 1 kg" });
     await expectPgError(
-      db
-        .insert(schema.orderLines)
-        .values({ orderId: order.id, itemId: otherItem.id, quantity: "1.000", createdBy: userId }),
+      db.insert(schema.orderLines).values({
+        shopId,
+        orderId: order.id,
+        itemId: otherItem.id,
+        quantity: "1.000",
+        createdBy: userId,
+      }),
       DB_ERROR.orderCompleted,
     );
   });

@@ -7,6 +7,7 @@ import { itemKey, type ImportRow } from "./import";
 
 // Database access for items, categories, brands and units. Takes `db` so it can be tested with PGlite;
 // server code calls these through ./queries.ts and ./actions.ts.
+// Every function takes the shop: it only ever reads and writes that shop's rows.
 
 export const STOCK_FILTERS = ["all", "in", "low", "out"] as const;
 export type StockFilter = (typeof STOCK_FILTERS)[number];
@@ -108,10 +109,11 @@ export type ItemListParams = {
   limit?: number;
 };
 
-export async function listItems(db: Database, params: ItemListParams) {
+export async function listItems(db: Database, shopId: string, params: ItemListParams) {
   const page = params.page ?? 1;
   const limit = params.limit ?? PAGE_SIZE;
   const conditions: (SQL | undefined)[] = [
+    eq(items.shopId, shopId),
     params.archived ? isNotNull(items.archivedAt) : isNull(items.archivedAt),
   ];
   // Every word must appear in the name, SKU, colour, pack size or brand ("marker blue", "glue 45").
@@ -148,9 +150,24 @@ export async function listItems(db: Database, params: ItemListParams) {
   return { rows: rows.map(toView), total, page };
 }
 
-export async function getItem(db: Database, id: string): Promise<ItemView | null> {
-  const [row] = await selectItems(db).where(eq(items.id, id));
+export async function getItem(db: Database, shopId: string, id: string): Promise<ItemView | null> {
+  const [row] = await selectItems(db).where(and(eq(items.shopId, shopId), eq(items.id, id)));
   return row ? toView(row) : null;
+}
+
+/** True when an item of this shop uses the photo (`path` may be the full photo or its thumbnail). */
+export async function photoBelongsToShop(
+  db: Database,
+  shopId: string,
+  path: string,
+): Promise<boolean> {
+  const fullPath = path.replace(/\.thumb\.jpg$/, ".jpg");
+  const [row] = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.shopId, shopId), eq(items.photoPath, fullPath)))
+    .limit(1);
+  return Boolean(row);
 }
 
 export type ItemWrite = {
@@ -167,10 +184,11 @@ export type ItemWrite = {
   photoPath: string | null;
 };
 
-export async function createItem(db: Database, input: ItemWrite, actorId: string) {
+export async function createItem(db: Database, shopId: string, input: ItemWrite, actorId: string) {
   const [item] = await db
     .insert(items)
     .values({
+      shopId,
       name: input.name,
       variant: input.variant,
       sku: input.sku,
@@ -191,6 +209,7 @@ export async function createItem(db: Database, input: ItemWrite, actorId: string
 /** Prices left `undefined` stay unchanged (staff edits). */
 export async function updateItem(
   db: Database,
+  shopId: string,
   id: string,
   input: Omit<ItemWrite, "sellingPricePaise" | "mrpPaise" | "photoPath"> & {
     sellingPricePaise?: number | null;
@@ -213,16 +232,16 @@ export async function updateItem(
       ...(input.mrpPaise !== undefined && { mrpPaise: input.mrpPaise }),
       ...(input.photoPath !== undefined && { photoPath: input.photoPath }),
     })
-    .where(eq(items.id, id))
+    .where(and(eq(items.shopId, shopId), eq(items.id, id)))
     .returning({ id: items.id, name: items.name, sku: items.sku });
   return item ?? null;
 }
 
-export async function setItemArchived(db: Database, id: string, archived: boolean) {
+export async function setItemArchived(db: Database, shopId: string, id: string, archived: boolean) {
   const [item] = await db
     .update(items)
     .set({ archivedAt: archived ? new Date() : null })
-    .where(eq(items.id, id))
+    .where(and(eq(items.shopId, shopId), eq(items.id, id)))
     .returning({ id: items.id, name: items.name });
   return item ?? null;
 }
@@ -231,41 +250,47 @@ export async function setItemArchived(db: Database, id: string, archived: boolea
 
 type LookupTable = typeof categories | typeof brands;
 
-function listLookup(db: Database, table: LookupTable) {
+function listLookup(db: Database, shopId: string, table: LookupTable) {
   return db
     .select({ id: table.id, name: table.name })
     .from(table)
-    .where(isNull(table.archivedAt))
+    .where(and(eq(table.shopId, shopId), isNull(table.archivedAt)))
     .orderBy(asc(sql`lower(${table.name})`));
 }
 
 /** Creates an entry, or returns the existing one with the same name (any capitalisation). */
-async function findOrCreateLookup(db: Database, table: LookupTable, name: string, actorId: string) {
+async function findOrCreateLookup(
+  db: Database,
+  shopId: string,
+  table: LookupTable,
+  name: string,
+  actorId: string,
+) {
   const [created] = await db
     .insert(table)
-    .values({ name, createdBy: actorId })
+    .values({ shopId, name, createdBy: actorId })
     .onConflictDoNothing()
     .returning({ id: table.id, name: table.name });
   if (created) return { ...created, existed: false };
   const [existing] = await db
     .select({ id: table.id, name: table.name })
     .from(table)
-    .where(sql`lower(${table.name}) = lower(${name})`);
+    .where(and(eq(table.shopId, shopId), sql`lower(${table.name}) = lower(${name})`));
   // An archived entry with this name comes back into use.
   await db.update(table).set({ archivedAt: null }).where(eq(table.id, existing.id));
   return { ...existing, existed: true };
 }
 
-export const listCategories = (db: Database) => listLookup(db, categories);
-export const listBrands = (db: Database) => listLookup(db, brands);
-export const findOrCreateCategory = (db: Database, name: string, actorId: string) =>
-  findOrCreateLookup(db, categories, name, actorId);
-export const findOrCreateBrand = (db: Database, name: string, actorId: string) =>
-  findOrCreateLookup(db, brands, name, actorId);
+export const listCategories = (db: Database, shopId: string) => listLookup(db, shopId, categories);
+export const listBrands = (db: Database, shopId: string) => listLookup(db, shopId, brands);
+export const findOrCreateCategory = (db: Database, shopId: string, name: string, actorId: string) =>
+  findOrCreateLookup(db, shopId, categories, name, actorId);
+export const findOrCreateBrand = (db: Database, shopId: string, name: string, actorId: string) =>
+  findOrCreateLookup(db, shopId, brands, name, actorId);
 
 // ---- Units ----
 
-export async function listUnits(db: Database) {
+export async function listUnits(db: Database, shopId: string) {
   return db
     .select({
       id: units.id,
@@ -278,23 +303,27 @@ export async function listUnits(db: Database) {
       ),
     })
     .from(units)
-    .where(isNull(units.archivedAt))
+    .where(and(eq(units.shopId, shopId), isNull(units.archivedAt)))
     .orderBy(asc(units.name));
 }
 
-export async function getUnit(db: Database, id: string) {
-  const [unit] = await db.select().from(units).where(eq(units.id, id));
+export async function getUnit(db: Database, shopId: string, id: string) {
+  const [unit] = await db
+    .select()
+    .from(units)
+    .where(and(eq(units.shopId, shopId), eq(units.id, id)));
   return unit ?? null;
 }
 
 export async function createUnit(
   db: Database,
+  shopId: string,
   input: { name: string; label: string; allowsDecimal: boolean },
   actorId: string,
 ) {
   const [unit] = await db
     .insert(units)
-    .values({ ...input, createdBy: actorId })
+    .values({ ...input, shopId, createdBy: actorId })
     .returning({ id: units.id, name: units.name });
   return unit;
 }
@@ -304,11 +333,16 @@ export type UnitUpdateResult = "ok" | "not-found" | "decimal-locked";
 /** Decimals can only be switched while no item uses the unit (stock may already have decimals). */
 export async function updateUnit(
   db: Database,
+  shopId: string,
   id: string,
   input: { name: string; label: string; allowsDecimal: boolean },
 ): Promise<UnitUpdateResult> {
   return db.transaction(async (tx) => {
-    const [unit] = await tx.select().from(units).where(eq(units.id, id)).for("update");
+    const [unit] = await tx
+      .select()
+      .from(units)
+      .where(and(eq(units.shopId, shopId), eq(units.id, id)))
+      .for("update");
     if (!unit) return "not-found";
     if (unit.allowsDecimal !== input.allowsDecimal) {
       const [used] = await tx
@@ -318,7 +352,10 @@ export async function updateUnit(
         .limit(1);
       if (used) return "decimal-locked";
     }
-    await tx.update(units).set(input).where(eq(units.id, id));
+    await tx
+      .update(units)
+      .set(input)
+      .where(and(eq(units.shopId, shopId), eq(units.id, id)));
     return "ok";
   });
 }
@@ -326,7 +363,7 @@ export async function updateUnit(
 // ---- Import ----
 
 /** What checkImport() needs to know about items already in the app. */
-export async function importContext(db: Database) {
+export async function importContext(db: Database, shopId: string) {
   const [unitRows, existing] = await Promise.all([
     db
       .select({
@@ -336,7 +373,7 @@ export async function importContext(db: Database) {
         allowsDecimal: units.allowsDecimal,
       })
       .from(units)
-      .where(isNull(units.archivedAt))
+      .where(and(eq(units.shopId, shopId), isNull(units.archivedAt)))
       .orderBy(asc(units.name)),
     db
       .select({
@@ -345,7 +382,8 @@ export async function importContext(db: Database) {
         variant: items.variant,
         packSize: items.packSize,
       })
-      .from(items),
+      .from(items)
+      .where(eq(items.shopId, shopId)),
   ]);
   return {
     units: unitRows,
@@ -360,6 +398,7 @@ export async function importContext(db: Database) {
  */
 export async function importItems(
   db: Database,
+  shopId: string,
   rows: ImportRow[],
   actorId: string,
   openingStockNote: string,
@@ -377,7 +416,7 @@ export async function importItems(
       if (!name) return null;
       const key = name.toLowerCase();
       if (!cache.has(key)) {
-        const found = await create(tx, name, actorId);
+        const found = await create(tx, shopId, name, actorId);
         if (!found.existed) newNames[kind]++;
         cache.set(key, found.id);
       }
@@ -388,6 +427,7 @@ export async function importItems(
     for (const row of rows) {
       const item = await createItem(
         tx,
+        shopId,
         {
           name: row.name,
           variant: row.variant,
@@ -410,10 +450,11 @@ export async function importItems(
     if (withStock.length > 0) {
       const [entry] = await tx
         .insert(stockEntries)
-        .values({ reference: "IMPORT", note: openingStockNote, createdBy: actorId })
+        .values({ shopId, reference: "IMPORT", note: openingStockNote, createdBy: actorId })
         .returning({ id: stockEntries.id });
       for (const { id, row } of withStock) {
         await tx.insert(stockMovements).values({
+          shopId,
           type: "IN",
           itemId: id,
           quantityChange: qtyToDb(row.openingStockMilli),

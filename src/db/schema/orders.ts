@@ -1,16 +1,18 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { archivedAt, createdBy, paise, quantity, timestamps } from "./columns";
+import { archivedAt, createdBy, paise, quantity, shopRef, timestamps } from "./columns";
 import { items } from "./items";
 import { profiles } from "./profiles";
 import { vendors } from "./vendors";
@@ -27,10 +29,12 @@ export const orders = pgTable(
   "orders",
   {
     id: uuid().primaryKey().defaultRandom(),
+    ...shopRef(),
     status: orderStatus().notNull().default("DRAFT"),
-    // ORD-2026-27-00001; null while DRAFT.
+    // ORD-2026-27-00001 (numbered per shop); null while DRAFT.
     orderNumber: text(),
-    vendorId: uuid().references(() => vendors.id),
+    // The customer must belong to the same shop (composite foreign key below).
+    vendorId: uuid(),
     // AMOUNT: discountValue is paise. PERCENT: discountValue is basis points (10% = 1000).
     discountKind: discountKind().notNull().default("AMOUNT"),
     discountValue: paise().notNull().default(0),
@@ -45,7 +49,14 @@ export const orders = pgTable(
     ...createdBy(),
   },
   (t) => [
-    unique("orders_order_number_key").on(t.orderNumber),
+    unique("orders_order_number_key").on(t.shopId, t.orderNumber),
+    unique("orders_shop_id_key").on(t.shopId, t.id),
+    foreignKey({
+      name: "orders_vendor_fk",
+      columns: [t.shopId, t.vendorId],
+      foreignColumns: [vendors.shopId, vendors.id],
+    }),
+    index("orders_shop_status_completed_idx").on(t.shopId, t.status, t.completedAt.desc()),
     index("orders_status_completed_at_idx").on(t.status, t.completedAt.desc()),
     index("orders_vendor_idx").on(t.vendorId),
     index("orders_order_number_trgm_idx").using("gin", t.orderNumber.op("gin_trgm_ops")),
@@ -77,12 +88,10 @@ export const orderLines = pgTable(
   "order_lines",
   {
     id: uuid().primaryKey().defaultRandom(),
-    orderId: uuid()
-      .notNull()
-      .references(() => orders.id, { onDelete: "cascade" }),
-    itemId: uuid()
-      .notNull()
-      .references(() => items.id),
+    ...shopRef(),
+    // Order and item must belong to the same shop (composite foreign keys below).
+    orderId: uuid().notNull(),
+    itemId: uuid().notNull(),
     quantity: quantity().notNull(),
     // Selling price for this line. May be empty in a draft; required at checkout.
     unitPricePaise: paise(),
@@ -95,14 +104,29 @@ export const orderLines = pgTable(
   },
   (t) => [
     unique("order_lines_order_item_key").on(t.orderId, t.itemId),
+    foreignKey({
+      name: "order_lines_order_fk",
+      columns: [t.shopId, t.orderId],
+      foreignColumns: [orders.shopId, orders.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "order_lines_item_fk",
+      columns: [t.shopId, t.itemId],
+      foreignColumns: [items.shopId, items.id],
+    }),
     index("order_lines_item_idx").on(t.itemId),
     check("order_lines_quantity_positive", sql`${t.quantity} > 0`),
     check("order_lines_unit_price_nonneg", sql`${t.unitPricePaise} >= 0`),
   ],
 );
 
-/** Gapless order numbers per Indian financial year ("2026-27"). */
-export const orderCounters = pgTable("order_counters", {
-  financialYear: text().primaryKey(),
-  lastValue: integer().notNull().default(0),
-});
+/** Gapless order numbers per shop and Indian financial year ("2026-27"). */
+export const orderCounters = pgTable(
+  "order_counters",
+  {
+    ...shopRef(),
+    financialYear: text().notNull(),
+    lastValue: integer().notNull().default(0),
+  },
+  (t) => [primaryKey({ name: "order_counters_pkey", columns: [t.shopId, t.financialYear] })],
+);

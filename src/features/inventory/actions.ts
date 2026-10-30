@@ -19,6 +19,7 @@ export async function createStockEntryAction(
   try {
     const entry = await createStockEntry(
       getDb(),
+      actor.shopId,
       {
         reference,
         note,

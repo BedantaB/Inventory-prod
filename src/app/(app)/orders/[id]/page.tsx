@@ -9,9 +9,9 @@ import { requireUser } from "@/features/auth/session";
 import { CartEditor } from "@/features/orders/components/cart-editor";
 import { OrderDetails } from "@/features/orders/components/order-details";
 import { getDraft, getOrder } from "@/features/orders/queries";
+import { getShop } from "@/features/shops/queries";
 import { format, getMessages } from "@/i18n";
 import { formatDateTime } from "@/lib/dates";
-import { serverEnv } from "@/lib/env.server";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -30,7 +30,7 @@ async function Order({ params, searchParams }: PageProps<"/orders/[id]">) {
   const showCost = can(user, "viewCost");
   const [{ id }, sp] = await Promise.all([params, searchParams]);
 
-  const draft = await getDraft(id, showCost);
+  const draft = await getDraft(user.shopId, id, showCost);
   if (draft) {
     return (
       <>
@@ -47,9 +47,11 @@ async function Order({ params, searchParams }: PageProps<"/orders/[id]">) {
     );
   }
 
-  const order = await getOrder(id, showCost);
+  const [order, shop] = await Promise.all([
+    getOrder(user.shopId, id, showCost),
+    getShop(user.shopId),
+  ]);
   if (!order) notFound();
-  const env = serverEnv();
   return (
     <>
       <div className="print:hidden">
@@ -64,9 +66,9 @@ async function Order({ params, searchParams }: PageProps<"/orders/[id]">) {
         justCompleted={sp.done === "1"}
         canArchive={can(user, "archive")}
         business={{
-          name: env.BUSINESS_NAME,
-          address: env.BUSINESS_ADDRESS,
-          phone: env.BUSINESS_PHONE,
+          name: shop?.name ?? user.shopName,
+          address: shop?.address ?? "",
+          phone: shop?.phone ?? "",
         }}
         m={m}
       />

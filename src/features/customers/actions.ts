@@ -29,7 +29,7 @@ export async function createCustomerAction(
   const actor = await requireUser();
   const parsed = parseForm(customerSchema, formData);
   if (!parsed.ok) return parsed.result;
-  const customer = await data.createCustomer(getDb(), parsed.data, actor.id);
+  const customer = await data.createCustomer(getDb(), actor.shopId, parsed.data, actor.id);
   revalidateCustomers();
   return success("customers.created", { name: customer.businessName }, customer);
 }
@@ -38,15 +38,15 @@ export async function updateCustomerAction(
   customerId: string,
   formData: FormData,
 ): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(customerId)) return failure("errors.notFound");
   const db = getDb();
-  const existing = await data.getCustomer(db, customerId);
+  const existing = await data.getCustomer(db, actor.shopId, customerId);
   if (!existing) return failure("errors.notFound");
   if (existing.archivedAt) return failure("errors.archivedRecord");
   const parsed = parseForm(customerSchema, formData);
   if (!parsed.ok) return parsed.result;
-  await data.updateCustomer(db, customerId, parsed.data);
+  await data.updateCustomer(db, actor.shopId, customerId, parsed.data);
   revalidateCustomers(customerId);
   return success("customers.updated");
 }
@@ -58,7 +58,7 @@ export async function setCustomerArchivedAction(
   const actor = await requireUser();
   if (!can(actor, "archive")) return failure("errors.adminOnly");
   if (!isUuid(customerId)) return failure("errors.notFound");
-  const customer = await data.setCustomerArchived(getDb(), customerId, archived);
+  const customer = await data.setCustomerArchived(getDb(), actor.shopId, customerId, archived);
   if (!customer) return failure("errors.notFound");
   revalidateCustomers(customerId);
   return success(archived ? "customers.archivedDone" : "customers.unarchivedDone", {

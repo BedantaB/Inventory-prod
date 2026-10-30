@@ -37,8 +37,8 @@ export default function NewOrderPage() {
 
 async function Drafts() {
   const m = getMessages();
-  await requireUser();
-  const drafts = await listDrafts();
+  const user = await requireUser();
+  const drafts = await listDrafts(user.shopId);
   if (drafts.length === 0) {
     return <EmptyState icon={ShoppingCartIcon} title={m.orders.noUnfinished} />;
   }

@@ -30,6 +30,11 @@ export async function login(page: Page, identifier: string, password: string) {
   await page.getByRole("button", { name: "Log in" }).click();
 }
 
+export async function loginAsPlatformAdmin(page: Page) {
+  await login(page, "platform", creds.ownerPassword);
+  await expect(page.getByRole("heading", { name: "Shops" })).toBeVisible();
+}
+
 export async function loginAsOwner(page: Page) {
   await login(page, creds.ownerEmail, creds.ownerPassword);
   await expect(page.getByRole("heading", { name: /^Namaste/ })).toBeVisible();
@@ -107,6 +112,22 @@ export async function cleanupTestData() {
   }
 }
 
+/** Removes shops made by the platform tests (name starts with "E2E "), with their logins. */
+export async function deleteTestShops() {
+  const { default: postgres } = await import("postgres");
+  const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
+  try {
+    const logins = await sql<{ id: string }[]>`
+      SELECT p.id FROM profiles p JOIN shops s ON s.id = p.shop_id WHERE s.name LIKE 'E2E %'`;
+    // Deleting the auth user also deletes the profile (ON DELETE CASCADE).
+    for (const { id } of logins) await adminClient().auth.admin.deleteUser(id);
+    await sql`DELETE FROM units WHERE shop_id IN (SELECT id FROM shops WHERE name LIKE 'E2E %')`;
+    await sql`DELETE FROM shops WHERE name LIKE 'E2E %'`;
+  } finally {
+    await sql.end();
+  }
+}
+
 /** A small valid PNG (a coloured square) for photo upload tests. */
 export function testPng(): { name: string; mimeType: string; buffer: Buffer } {
   return {
@@ -133,21 +154,20 @@ export async function createTestItem(
   const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
   try {
     const [row] = await sql<{ id: string }[]>`
-      INSERT INTO items (name, unit_id, mrp_paise, selling_price_paise, created_by)
-      SELECT ${name}, u.id, 2500, 2000, p.id
-      FROM units u, profiles p
-      WHERE u.name = ${unit} AND p.role = 'ADMIN'
-      LIMIT 1
+      INSERT INTO items (shop_id, name, unit_id, mrp_paise, selling_price_paise, created_by)
+      SELECT p.shop_id, ${name}, u.id, 2500, 2000, p.id
+      FROM profiles p JOIN units u ON u.shop_id = p.shop_id
+      WHERE p.username = 'owner' AND u.name = ${unit}
       RETURNING id`;
     if (stock) {
       await sql.begin(async (tx) => {
         const [entry] = await tx<{ id: string }[]>`
-          INSERT INTO stock_entries (reference, created_by)
-          SELECT 'E2E', id FROM profiles WHERE role = 'ADMIN' LIMIT 1 RETURNING id`;
+          INSERT INTO stock_entries (shop_id, reference, created_by)
+          SELECT shop_id, 'E2E', id FROM profiles p WHERE p.username = 'owner' RETURNING id`;
         await tx`
-          INSERT INTO stock_movements (type, item_id, quantity_change, unit_cost_paise, stock_entry_id, created_by)
-          SELECT 'IN', ${row.id}, ${stock.qty}, ${stock.costPaise}, ${entry.id}, id
-          FROM profiles WHERE role = 'ADMIN' LIMIT 1`;
+          INSERT INTO stock_movements (shop_id, type, item_id, quantity_change, unit_cost_paise, stock_entry_id, created_by)
+          SELECT shop_id, 'IN', ${row.id}, ${stock.qty}, ${stock.costPaise}, ${entry.id}, id
+          FROM profiles p WHERE p.username = 'owner'`;
       });
     }
     return row.id;
@@ -162,8 +182,8 @@ export async function createTestCustomer(name: string): Promise<string> {
   const sql = postgres(env("MIGRATION_DATABASE_URL"), { prepare: false, max: 1 });
   try {
     const [row] = await sql<{ id: string }[]>`
-      INSERT INTO vendors (business_name, phone, city, created_by)
-      SELECT ${name}, '+919800000000', 'Agartala', id FROM profiles WHERE role = 'ADMIN' LIMIT 1
+      INSERT INTO vendors (shop_id, business_name, phone, city, created_by)
+      SELECT shop_id, ${name}, '+919800000000', 'Agartala', id FROM profiles p WHERE p.username = 'owner'
       RETURNING id`;
     return row.id;
   } finally {

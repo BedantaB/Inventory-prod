@@ -26,10 +26,10 @@ async function EditItem({ params }: Pick<PageProps<"/items/[id]/edit">, "params"
   const user = await requireUser();
   const { id } = await params;
   const [item, categories, brands, units] = await Promise.all([
-    getItem(id),
-    listCategories(),
-    listBrands(),
-    listUnits(),
+    getItem(user.shopId, id),
+    listCategories(user.shopId),
+    listBrands(user.shopId),
+    listUnits(user.shopId),
   ]);
   if (!item) notFound();
   if (item.archivedAt) redirect(`/items/${item.id}`);

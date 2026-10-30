@@ -9,7 +9,7 @@ import { useMessages } from "@/i18n/provider";
 import { cn } from "@/lib/utils";
 import { isActive, visibleItems } from "./nav-items";
 
-export type ShellUser = { fullName: string; isAdmin: boolean } | null;
+export type ShellUser = { fullName: string; isAdmin: boolean; shopName: string } | null;
 
 /** Desktop left sidebar. `user` is null while the login is still loading. */
 export function SidebarNav({ user }: { user: ShellUser }) {
@@ -22,7 +22,7 @@ export function SidebarNav({ user }: { user: ShellUser }) {
         <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <PackageIcon className="size-6" aria-hidden />
         </span>
-        <span className="text-xl font-bold">{m.app.name}</span>
+        <span className="line-clamp-2 text-xl font-bold">{user?.shopName || m.app.name}</span>
       </Link>
 
       <nav aria-label={m.nav.mainNavigation} className="flex flex-1 flex-col gap-1">

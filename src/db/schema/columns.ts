@@ -1,7 +1,14 @@
 import { bigint, numeric, timestamp, uuid } from "drizzle-orm/pg-core";
-import { profiles } from "./profiles";
+import { profiles, shops } from "./profiles";
 
 // Column builders must not be shared between tables, so each helper returns fresh builders.
+
+/** The shop a row belongs to. Every business table has it; every query filters by it. */
+export const shopRef = () => ({
+  shopId: uuid()
+    .notNull()
+    .references(() => shops.id),
+});
 
 export const timestamps = () => ({
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

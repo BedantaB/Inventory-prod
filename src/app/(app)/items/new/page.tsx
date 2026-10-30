@@ -22,13 +22,13 @@ export default function NewItemPage({ searchParams }: PageProps<"/items/new">) {
 
 async function NewItem({ searchParams }: Pick<PageProps<"/items/new">, "searchParams">) {
   const m = getMessages();
-  await requireUser();
+  const user = await requireUser();
   const copyId = firstParam((await searchParams).copy);
   const [categories, brands, units, copyFrom] = await Promise.all([
-    listCategories(),
-    listBrands(),
-    listUnits(),
-    copyId ? getItem(copyId) : null,
+    listCategories(user.shopId),
+    listBrands(user.shopId),
+    listUnits(user.shopId),
+    copyId ? getItem(user.shopId, copyId) : null,
   ]);
 
   return (

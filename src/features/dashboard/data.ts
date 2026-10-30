@@ -20,10 +20,11 @@ const lowOrOut = sql`(${items.currentStock} <= ${items.lowStockThreshold} OR ${i
 
 export async function getDashboard(
   db: Database,
+  shopId: string,
   { now, showCost }: { now: Date; showCost: boolean },
 ) {
   const today = istToday(now);
-  const active = isNull(items.archivedAt);
+  const active = and(eq(items.shopId, shopId), isNull(items.archivedAt));
 
   const [stock, lowStock, sales, drafts, recentEntries, recentOrders] = await Promise.all([
     db
@@ -65,6 +66,7 @@ export async function getDashboard(
       .from(orders)
       .where(
         and(
+          eq(orders.shopId, shopId),
           eq(orders.status, "COMPLETED"),
           isNull(orders.archivedAt),
           gte(orders.completedAt, today.start),
@@ -74,7 +76,7 @@ export async function getDashboard(
     db
       .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(orders)
-      .where(eq(orders.status, "DRAFT")),
+      .where(and(eq(orders.shopId, shopId), eq(orders.status, "DRAFT"))),
     db
       .select({
         id: stockEntries.id,
@@ -88,6 +90,7 @@ export async function getDashboard(
       })
       .from(stockEntries)
       .innerJoin(profiles, eq(stockEntries.createdBy, profiles.id))
+      .where(eq(stockEntries.shopId, shopId))
       .orderBy(desc(stockEntries.createdAt))
       .limit(8),
     db
@@ -102,7 +105,9 @@ export async function getDashboard(
       .from(orders)
       .innerJoin(vendors, eq(orders.vendorId, vendors.id))
       .innerJoin(profiles, eq(orders.completedBy, profiles.id))
-      .where(and(eq(orders.status, "COMPLETED"), isNull(orders.archivedAt)))
+      .where(
+        and(eq(orders.shopId, shopId), eq(orders.status, "COMPLETED"), isNull(orders.archivedAt)),
+      )
       .orderBy(desc(orders.completedAt))
       .limit(8),
   ]);

@@ -18,7 +18,10 @@ export default function HomePage({ searchParams }: PageProps<"/">) {
 async function HomeContent({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const m = getMessages();
   const user = await requireUser();
-  const [sp, data] = await Promise.all([searchParams, getDashboard(can(user, "viewCost"))]);
+  const [sp, data] = await Promise.all([
+    searchParams,
+    getDashboard(user.shopId, can(user, "viewCost")),
+  ]);
 
   return (
     <>

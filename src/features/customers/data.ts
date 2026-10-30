@@ -32,10 +32,12 @@ export type CustomerView = NonNullable<Awaited<ReturnType<typeof getCustomer>>>;
 
 export async function listCustomers(
   db: Database,
+  shopId: string,
   params: { q?: string; sort?: CustomerSort; page?: number; archived?: boolean },
 ) {
   const page = params.page ?? 1;
   const conditions: (SQL | undefined)[] = [
+    eq(vendors.shopId, shopId),
     params.archived ? isNotNull(vendors.archivedAt) : isNull(vendors.archivedAt),
   ];
   for (const pattern of searchPatterns(params.q)) {
@@ -73,15 +75,23 @@ export async function listCustomers(
   return { rows, total, page };
 }
 
-export async function getCustomer(db: Database, id: string) {
-  const [row] = await db.select(customerColumns).from(vendors).where(eq(vendors.id, id));
+export async function getCustomer(db: Database, shopId: string, id: string) {
+  const [row] = await db
+    .select(customerColumns)
+    .from(vendors)
+    .where(and(eq(vendors.shopId, shopId), eq(vendors.id, id)));
   return row ?? null;
 }
 
-export async function createCustomer(db: Database, input: CustomerInput, actorId: string) {
+export async function createCustomer(
+  db: Database,
+  shopId: string,
+  input: CustomerInput,
+  actorId: string,
+) {
   const [row] = await db
     .insert(vendors)
-    .values({ ...input, createdBy: actorId })
+    .values({ ...input, shopId, createdBy: actorId })
     .returning({
       id: vendors.id,
       businessName: vendors.businessName,
@@ -91,27 +101,46 @@ export async function createCustomer(db: Database, input: CustomerInput, actorId
   return row;
 }
 
-export async function updateCustomer(db: Database, id: string, input: CustomerInput) {
+export async function updateCustomer(
+  db: Database,
+  shopId: string,
+  id: string,
+  input: CustomerInput,
+) {
   const [row] = await db
     .update(vendors)
     .set(input)
-    .where(eq(vendors.id, id))
+    .where(and(eq(vendors.shopId, shopId), eq(vendors.id, id)))
     .returning({ id: vendors.id, businessName: vendors.businessName });
   return row ?? null;
 }
 
-export async function setCustomerArchived(db: Database, id: string, archived: boolean) {
+export async function setCustomerArchived(
+  db: Database,
+  shopId: string,
+  id: string,
+  archived: boolean,
+) {
   const [row] = await db
     .update(vendors)
     .set({ archivedAt: archived ? new Date() : null })
-    .where(eq(vendors.id, id))
+    .where(and(eq(vendors.shopId, shopId), eq(vendors.id, id)))
     .returning({ id: vendors.id, businessName: vendors.businessName });
   return row ?? null;
 }
 
 /** Completed orders for one customer, newest first. */
-export async function listCustomerOrders(db: Database, customerId: string, page = 1) {
-  const where = and(eq(orders.vendorId, customerId), eq(orders.status, "COMPLETED"));
+export async function listCustomerOrders(
+  db: Database,
+  shopId: string,
+  customerId: string,
+  page = 1,
+) {
+  const where = and(
+    eq(orders.shopId, shopId),
+    eq(orders.vendorId, customerId),
+    eq(orders.status, "COMPLETED"),
+  );
   const [rows, [{ total, totalPaise }]] = await Promise.all([
     db
       .select({

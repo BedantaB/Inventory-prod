@@ -321,8 +321,15 @@ export const seedOrders: {
   { daysAgo: 0, hour: -1, customer: "Dey Stationers", by: "sunita", lines: [["DOMS-094", 10], ["DOMS-121", 25]] },
 ];
 
+/** The two sample shops. The first gets the DOMS data above, the second a few grocery items. */
+export const seedShops = [
+  { key: "prantik", name: "PRANTIK Stationers", address: "Battala, Agartala", phone: "9436000001" },
+  { key: "sharma", name: "Sharma General Store", address: "Melarmath, Agartala", phone: "9436000002" },
+] as const;
+
 export const seedUsers = [
-  { key: "owner", username: "owner", fullName: "Shop Owner", role: "ADMIN" },
-  { key: "ramesh", username: "ramesh", fullName: "Ramesh Kumar", role: "STAFF" },
-  { key: "sunita", username: "sunita", fullName: "Sunita Devi", role: "STAFF" },
+  { key: "owner", shop: "prantik", username: "owner", fullName: "Shop Owner", role: "ADMIN" },
+  { key: "ramesh", shop: "prantik", username: "ramesh", fullName: "Ramesh Kumar", role: "STAFF" },
+  { key: "sunita", shop: "prantik", username: "sunita", fullName: "Sunita Devi", role: "STAFF" },
+  { key: "sharma", shop: "sharma", username: "sharma", fullName: "Rakesh Sharma", role: "ADMIN" },
 ] as const;

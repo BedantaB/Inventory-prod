@@ -45,7 +45,7 @@ async function UsersResults({ searchParams }: Pick<PageProps<"/users">, "searchP
   const actor = await requireAdminPage();
   const { q } = await searchParams;
   const query = typeof q === "string" ? q : undefined;
-  const users = await listUsers(query);
+  const users = await listUsers(actor.shopId, query);
   return <UsersList users={users} query={query} currentUserId={actor.id} m={getMessages()} />;
 }
 

@@ -62,7 +62,7 @@ async function CustomersResults({ searchParams }: Pick<PageProps<"/customers">, 
     page: parsePage(sp.page),
     archived: canSeeArchived && view === "archived",
   };
-  const list = await listCustomers(params);
+  const list = await listCustomers(user.shopId, params);
 
   return (
     <>

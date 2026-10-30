@@ -8,10 +8,15 @@ You will end up with:
   separate from the development project you have been testing with.
 - **A Vercel project** in Mumbai that runs the app at a web address like
   `https://your-shop.vercel.app`.
-- **One owner login.** You then add staff logins inside the app.
+- **One platform admin login** (you). It creates each shop and its owner's login. Each owner then
+  adds their own staff inside the app. Shops never see each other's data, and the platform admin
+  sees no shop's items, customers or orders.
 
 > **Never put the sample data on production.** `pnpm db:seed` refuses to run there. For
-> production you create only the owner login (step 5).
+> production you create only the platform admin login (step 5).
+
+> **Already running version 1?** Don't follow steps 1–7 again: see
+> [Upgrading from version 1 to version 2](#upgrading-from-version-1-single-shop-to-version-2-multi-shop).
 
 ---
 
@@ -74,15 +79,14 @@ MIGRATION_DATABASE_URL=postgresql://postgres.<prod-ref>:<password>@aws-0-ap-sout
 NEXT_PUBLIC_SITE_URL=https://your-shop.vercel.app
 STAFF_EMAIL_DOMAIN=staff.inventory.app
 
-BUSINESS_NAME=Your Shop Name
-BUSINESS_ADDRESS=Shop address, City
-BUSINESS_PHONE=98xxxxxxxx
-
-# Only for step 5 (creating the owner login). Remove them afterwards.
-OWNER_EMAIL=you@example.com
-OWNER_PASSWORD=a-long-password-you-will-remember
-OWNER_NAME=Your Name
+# Only for step 5 (creating the platform admin login). Remove them afterwards.
+PLATFORM_ADMIN_EMAIL=you@example.com
+PLATFORM_ADMIN_PASSWORD=a-long-password-you-will-remember
+PLATFORM_ADMIN_NAME=Your Name
 ```
+
+Each shop's name, address and phone (printed on orders) are set in the app, under **Shop
+settings**.
 
 ## Step 4: Create the tables in production
 
@@ -90,17 +94,17 @@ OWNER_NAME=Your Name
 ENV_FILE=.env.production.local pnpm db:migrate
 ```
 
-This creates every table, the stock and order rules, the security policies, the built-in units
-and the photo storage bucket. You should see `migrations applied successfully`. Ignore notices
+This creates every table, the stock and order rules, the security policies and the photo storage
+bucket. (Each shop gets the built-in units when it is created.) You should see `migrations applied successfully`. Ignore notices
 like "already exists, skipping".
 
-## Step 5: Create the owner login
+## Step 5: Create the platform admin login
 
 ```bash
-ENV_FILE=.env.production.local pnpm owner:create
+ENV_FILE=.env.production.local pnpm platform-admin:create
 ```
 
-It prints the owner's email and username. Then delete the three `OWNER_…` lines from
+It prints the email and username. Then delete the three `PLATFORM_ADMIN_…` lines from
 `.env.production.local`.
 
 ## Step 6: Put the app on Vercel
@@ -146,16 +150,19 @@ pnpm dlx vercel@latest link      # creates the Vercel project
 
 ## Step 7: First day checks
 
-1. Open the web address on your phone and log in as the owner.
-2. **Staff & Logins:** add a login for each staff member.
-3. Check the **Units** page (Items → Units at the bottom) and add any you need.
-4. Add your items:
+1. Log in as the platform admin. You land on **Shops**. Use **Add shop** to create the shop and
+   its owner's login (a username and password). Tell the owner both.
+2. Open the web address on the owner's phone and log in as the owner. Under **Shop settings**,
+   check the name, address and phone.
+3. **Staff & Logins:** add a login for each staff member.
+4. Check the **Units** page (Items → Units at the bottom) and add any you need.
+5. Add your items:
    - **Import from spreadsheet** on the Items page is fastest: fill **Opening stock** and
      **Cost price** so stock starts correct.
    - Or add items one by one, then use **Add Stock**.
-5. Add your customers.
-6. Make one real test order, print it, and check the stock went down.
-7. On staff phones, open the address in Chrome and use **⋮ → Add to Home screen**, so the app
+6. Add your customers.
+7. Make one real test order, print it, and check the stock went down.
+8. On staff phones, open the address in Chrome and use **⋮ → Add to Home screen**, so the app
    opens like any other app.
 
 ---
@@ -178,6 +185,35 @@ pnpm dlx vercel@latest link      # creates the Vercel project
      version back in seconds.
    - Database changes are not undone by this, which is why migrations only ever add.
 
+## Upgrading from version 1 (single shop) to version 2 (multi-shop)
+
+Version 2 moves everything that is already in the database into one shop called **My Shop**.
+Its owner, staff, items, stock, customers and orders stay exactly as they were. The upgrade test
+(`tests/db/upgrade-v1.test.ts`) checks this on a copy of a version 1 database.
+
+Unlike normal updates, **this migration and the new code must go live together**. After the
+migration, version 1 can no longer save anything, and version 2 doesn't work on the old
+database. Expect the app to be unusable for a minute or two, so do it when nobody is working
+(early morning or after closing).
+
+1. **Take a backup first** (see [Backups](#backups)). On the Free plan this is your only copy.
+2. Make sure `pnpm check` passes and the `v2-multishop` branch is ready to merge.
+3. Apply the migration to production:
+   ```bash
+   ENV_FILE=.env.production.local pnpm db:migrate
+   ```
+4. **Straight away**, deploy the new code: merge `v2-multishop` into `main` and `git push`.
+   Wait for Vercel to show the deployment as **Ready**.
+5. Create your platform admin login (step 5 above). Use a **different email** from the shop
+   owner's: one email can only have one login.
+6. Log in as the shop owner and open **Shop settings**: rename "My Shop" and fill in the
+   address and phone (they replace the old `BUSINESS_*` settings, which you can delete from
+   Vercel).
+7. Log in as the platform admin: you should see the one shop. Add new shops from there.
+
+If something goes wrong, restore the backup from step 1 and promote the previous Vercel
+deployment (see "Updating the app later", step 4).
+
 ## Backups
 
 - **Pro plan:** Supabase keeps daily backups for 7 days. You can restore them from
@@ -198,6 +234,8 @@ pnpm dlx vercel@latest link      # creates the Vercel project
 - [ ] Every account (Supabase, Vercel, GitHub, the email used for the owner login) has
       two-factor login.
 - [ ] Turn off the logins of staff who leave, the same day (Staff & Logins → Turn off login).
+- [ ] When a shop stops using the app, turn the whole shop off (platform admin → Shops →
+      the shop → Turn off shop). Nothing is deleted.
 - [ ] If the secret key or database password ever leaks:
   - Create a new key under Project Settings → API Keys and delete the old one.
   - Reset the database password under Project Settings → Database.

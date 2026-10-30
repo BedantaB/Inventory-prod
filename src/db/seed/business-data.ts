@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as schema from "../schema";
 import type { Database } from "../types";
 import { addDraftLine, checkoutDraft, createDraft, setDraftDiscount } from "@/features/orders/data";
@@ -28,7 +28,7 @@ function paise(rupees: number) {
   return value;
 }
 
-/** Removes all items, customers, stock and orders. Logins and units are kept. */
+/** Removes all items, customers, stock and orders of every shop. Shops, logins and units are kept. */
 export async function wipeBusinessData(db: Database) {
   await db.execute(sql`
     TRUNCATE order_lines, stock_movements, orders, stock_entries, items, categories, brands, vendors, order_counters
@@ -37,26 +37,30 @@ export async function wipeBusinessData(db: Database) {
 }
 
 /**
- * Adds categories, items, customers and backdated stock-in bills in one transaction.
+ * Adds categories, items, customers and backdated stock-in bills to one shop, in one transaction.
  * `userIds` must contain the keys used in seedStockEntries (owner, ramesh, sunita).
  */
-export async function seedBusinessData(db: Database, userIds: Record<string, string>) {
+export async function seedBusinessData(
+  db: Database,
+  shopId: string,
+  userIds: Record<string, string>,
+) {
   const ownerId = userIds.owner;
   const now = Date.now();
 
   return db.transaction(async (tx) => {
-    const units = await tx.select().from(schema.units);
+    const units = await tx.select().from(schema.units).where(eq(schema.units.shopId, shopId));
     const unitByName = new Map(units.map((u) => [u.name, u]));
 
     const categories = await tx
       .insert(schema.categories)
-      .values(seedCategories.map((name) => ({ name, createdBy: ownerId })))
+      .values(seedCategories.map((name) => ({ shopId, name, createdBy: ownerId })))
       .returning();
     const categoryId = new Map(categories.map((c) => [c.name, c.id]));
 
     const brands = await tx
       .insert(schema.brands)
-      .values(seedBrands.map((name) => ({ name, createdBy: ownerId })))
+      .values(seedBrands.map((name) => ({ shopId, name, createdBy: ownerId })))
       .returning();
     const brandId = new Map(brands.map((b) => [b.name, b.id]));
 
@@ -67,6 +71,7 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
           const unit = unitByName.get(item.unit);
           if (!unit) throw new Error(`Unknown unit ${item.unit}`);
           return {
+            shopId,
             sku: item.sku,
             name: item.name,
             variant: item.variant ?? null,
@@ -90,6 +95,7 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
       .values(
         seedVendors.map((v) => ({
           ...v,
+          shopId,
           phone: `+91${v.phone}`,
           createdAt: new Date(now - 29 * DAY_MS),
           createdBy: ownerId,
@@ -123,7 +129,7 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
         const createdBy = userIds[entry.by];
         const [stockEntry] = await tx
           .insert(schema.stockEntries)
-          .values({ reference: entry.reference, note: entry.note, createdAt, createdBy })
+          .values({ shopId, reference: entry.reference, note: entry.note, createdAt, createdBy })
           .returning();
 
         for (const item of seedItems) {
@@ -134,6 +140,7 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
             if (qtyMilli === null)
               throw new Error(`Bad quantity ${qty} for ${item.sku} (${item.unit})`);
             await tx.insert(schema.stockMovements).values({
+              shopId,
               type: "IN",
               itemId: itemBySku.get(item.sku)!.id,
               quantityChange: qtyToDb(qtyMilli),
@@ -148,22 +155,24 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
       } else {
         const order = event.order;
         const by = userIds[order.by];
-        const { id } = await createDraft(tx, by, vendorId.get(order.customer)!);
+        const { id } = await createDraft(tx, shopId, by, vendorId.get(order.customer)!);
         for (const [sku, qty] of order.lines) {
           const item = itemBySku.get(sku);
           if (!item) throw new Error(`Unknown SKU in seed order: ${sku}`);
-          const added = await addDraftLine(tx, id, item.id, by, false);
+          const added = await addDraftLine(tx, shopId, id, item.id, by, false);
           if (added.status !== "ok") throw new Error(`Could not add ${sku}`);
           await tx
             .update(schema.orderLines)
             .set({ quantity: qtyToDb(qty * 1000) })
-            .where(eq(schema.orderLines.id, added.line.id));
+            .where(
+              and(eq(schema.orderLines.shopId, shopId), eq(schema.orderLines.id, added.line.id)),
+            );
         }
         if (order.discount)
-          await setDraftDiscount(tx, id, order.discount.kind, order.discount.value);
+          await setDraftDiscount(tx, shopId, id, order.discount.kind, order.discount.value);
         // Backdate while it's still a draft: completed orders can't be changed (trigger).
         await tx.update(schema.orders).set({ createdAt }).where(eq(schema.orders.id, id));
-        const result = await checkoutDraft(tx, id, by, createdAt);
+        const result = await checkoutDraft(tx, shopId, id, by, createdAt);
         if (result.status !== "completed")
           throw new Error(`Seed order failed: ${JSON.stringify(result)}`);
         orderCount++;
@@ -179,5 +188,59 @@ export async function seedBusinessData(db: Database, userIds: Record<string, str
       movements,
       orders: orderCount,
     };
+  });
+}
+
+/**
+ * A second, small shop (a grocery), so you can check that two shops never see each other's data.
+ */
+export async function seedSecondShop(db: Database, shopId: string, ownerId: string) {
+  return db.transaction(async (tx) => {
+    const [pcs] = await tx
+      .select()
+      .from(schema.units)
+      .where(and(eq(schema.units.shopId, shopId), eq(schema.units.name, "pcs")));
+    const items = await tx
+      .insert(schema.items)
+      .values(
+        [
+          { sku: "GEN-001", name: "Rice Bag 25 kg", sell: 1450 },
+          { sku: "GEN-002", name: "Mustard Oil 1 L", sell: 185 },
+          { sku: "GEN-003", name: "Washing Soap", sell: 32 },
+        ].map((item) => ({
+          shopId,
+          sku: item.sku,
+          name: item.name,
+          unitId: pcs.id,
+          sellingPricePaise: paise(item.sell),
+          lowStockThreshold: qtyToDb(5000),
+          createdBy: ownerId,
+        })),
+      )
+      .returning();
+    await tx.insert(schema.vendors).values({
+      shopId,
+      businessName: "Sharma Kirana",
+      contactPerson: "Rakesh Sharma",
+      phone: "+919436099999",
+      city: "Agartala",
+      createdBy: ownerId,
+    });
+    const [entry] = await tx
+      .insert(schema.stockEntries)
+      .values({ shopId, reference: "OPENING", note: "Opening stock", createdBy: ownerId })
+      .returning();
+    for (const [index, item] of items.entries()) {
+      await tx.insert(schema.stockMovements).values({
+        shopId,
+        type: "IN",
+        itemId: item.id,
+        quantityChange: qtyToDb((index + 1) * 20_000),
+        unitCostPaise: Math.round((item.sellingPricePaise ?? 0) * 0.8),
+        stockEntryId: entry.id,
+        createdBy: ownerId,
+      });
+    }
+    return { items: items.length };
   });
 }

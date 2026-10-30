@@ -129,7 +129,7 @@ test.describe("managing staff logins", () => {
 
     // ...and they cannot log in again.
     await login(staffPage, username, password);
-    await expect(staffPage.getByText(/This login has been turned off/)).toBeVisible();
+    await expect(staffPage.getByText(/This login or shop has been turned off/)).toBeVisible();
     await staffContext.close();
   });
 

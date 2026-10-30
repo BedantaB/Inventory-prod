@@ -38,9 +38,9 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
   const user = await requireUser();
   const { id } = await params;
   const sp = await searchParams;
-  const customer = await getCustomer(id);
+  const customer = await getCustomer(user.shopId, id);
   if (!customer) notFound();
-  const history = await listCustomerOrders(customer.id, parsePage(sp.page));
+  const history = await listCustomerOrders(user.shopId, customer.id, parsePage(sp.page));
 
   const facts: [string, string | null][] = [
     [m.customers.contactPerson, customer.contactPerson],

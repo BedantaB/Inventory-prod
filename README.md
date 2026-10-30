@@ -76,15 +76,21 @@ pnpm db:seed        # creates the logins and sample items, customers and stock
 pnpm dev            # starts the app at http://localhost:3000
 ```
 
-The seed script creates three logins:
+The seed script creates two shops, so you can check they never see each other's data, and
+these logins:
 
-| Login                                         | Password              | Role  |
-| --------------------------------------------- | --------------------- | ----- |
-| your `SEED_ADMIN_EMAIL` (or username `owner`) | `SEED_ADMIN_PASSWORD` | Admin |
-| username `ramesh`                             | `SEED_STAFF_PASSWORD` | Staff |
-| username `sunita`                             | `SEED_STAFF_PASSWORD` | Staff |
+| Login                                         | Password              | Shop                 | Role           |
+| --------------------------------------------- | --------------------- | -------------------- | -------------- |
+| your `SEED_ADMIN_EMAIL` (or username `owner`) | `SEED_ADMIN_PASSWORD` | PRANTIK Stationers   | Owner          |
+| username `ramesh`                             | `SEED_STAFF_PASSWORD` | PRANTIK Stationers   | Staff          |
+| username `sunita`                             | `SEED_STAFF_PASSWORD` | PRANTIK Stationers   | Staff          |
+| username `sharma`                             | `SEED_STAFF_PASSWORD` | Sharma General Store | Owner          |
+| username `platform`                           | `SEED_ADMIN_PASSWORD` | —                    | Platform admin |
 
-The sample data is the DOMS stationery price list:
+The platform admin creates shops and their owner logins, and sees no shop data.
+
+PRANTIK Stationers gets the DOMS stationery price list (Sharma General Store gets 3 grocery
+items):
 
 - 129 items, plus colour versions, 150 in total.
 - MRP comes from the list. Selling price is 85% of MRP and cost is 70% of MRP; both are
@@ -92,8 +98,8 @@ The sample data is the DOMS stationery price list:
 - 15 customers in Tripura.
 - 14 past orders, including 2 from today.
 
-Run `pnpm db:seed --reset` at any time to wipe the items, customers, stock and orders and
-reload the sample data. Logins are kept.
+Run `pnpm db:seed --reset` at any time to wipe the items, customers, stock and orders of all
+shops and reload the sample data. Shops and logins are kept.
 
 ### 6. Check everything works
 
@@ -127,5 +133,6 @@ open `http://<your-computer's-IP>:3000` on the phone.
 ## Deployment
 
 See **[DEPLOYMENT.md](DEPLOYMENT.md)**: a step-by-step guide for Supabase (production project in
-Mumbai) and Vercel. On production you create only the owner login (`pnpm owner:create`), never
-the sample data.
+Mumbai) and Vercel. On production you create only the platform admin login
+(`pnpm platform-admin:create`), never the sample data. The platform admin then creates each shop
+and its owner's login in the app.

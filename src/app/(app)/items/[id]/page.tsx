@@ -38,9 +38,9 @@ export default function ItemPage({ params, searchParams }: PageProps<"/items/[id
 async function ItemDetails({ params, searchParams }: PageProps<"/items/[id]">) {
   const m = getMessages();
   const user = await requireUser();
-  const [item, sp] = await Promise.all([getItem((await params).id), searchParams]);
+  const [item, sp] = await Promise.all([getItem(user.shopId, (await params).id), searchParams]);
   if (!item) notFound();
-  const history = await listItemMovements(item.id, parsePage(sp.page));
+  const history = await listItemMovements(user.shopId, item.id, parsePage(sp.page));
   const showCost = can(user, "viewCost");
   const unit = item.unitName;
 

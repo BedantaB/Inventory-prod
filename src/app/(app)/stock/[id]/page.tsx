@@ -29,7 +29,7 @@ export default function StockEntryPage({ params }: PageProps<"/stock/[id]">) {
 async function StockEntry({ params }: Pick<PageProps<"/stock/[id]">, "params">) {
   const m = getMessages();
   const user = await requireUser();
-  const entry = await getStockEntry((await params).id);
+  const entry = await getStockEntry(user.shopId, (await params).id);
   if (!entry) notFound();
   const showCost = can(user, "viewCost");
   const total = entry.lines.reduce(

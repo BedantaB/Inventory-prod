@@ -26,6 +26,7 @@ export class StockEntryProblem extends Error {
  */
 export async function createStockEntry(
   db: Database,
+  shopId: string,
   input: { reference: string | null; note: string | null; lines: StockLine[] },
   actorId: string,
 ) {
@@ -35,7 +36,7 @@ export async function createStockEntry(
       .select({ id: items.id, archivedAt: items.archivedAt, allowsDecimal: units.allowsDecimal })
       .from(items)
       .innerJoin(units, eq(items.unitId, units.id))
-      .where(inArray(items.id, ids));
+      .where(and(eq(items.shopId, shopId), inArray(items.id, ids)));
     const byId = new Map(found.map((i) => [i.id, i]));
 
     const problems: LineProblem[] = [];
@@ -51,11 +52,12 @@ export async function createStockEntry(
 
     const [entry] = await tx
       .insert(stockEntries)
-      .values({ reference: input.reference, note: input.note, createdBy: actorId })
+      .values({ shopId, reference: input.reference, note: input.note, createdBy: actorId })
       .returning({ id: stockEntries.id });
 
     for (const line of input.lines) {
       await tx.insert(stockMovements).values({
+        shopId,
         type: "IN",
         itemId: line.itemId,
         quantityChange: qtyToDb(line.qtyMilli),
@@ -68,7 +70,7 @@ export async function createStockEntry(
   });
 }
 
-export async function getStockEntry(db: Database, id: string) {
+export async function getStockEntry(db: Database, shopId: string, id: string) {
   const [entry] = await db
     .select({
       id: stockEntries.id,
@@ -79,7 +81,7 @@ export async function getStockEntry(db: Database, id: string) {
     })
     .from(stockEntries)
     .innerJoin(profiles, eq(stockEntries.createdBy, profiles.id))
-    .where(eq(stockEntries.id, id));
+    .where(and(eq(stockEntries.shopId, shopId), eq(stockEntries.id, id)));
   if (!entry) return null;
 
   const lines = await db
@@ -97,7 +99,7 @@ export async function getStockEntry(db: Database, id: string) {
     .from(stockMovements)
     .innerJoin(items, eq(stockMovements.itemId, items.id))
     .innerJoin(units, eq(items.unitId, units.id))
-    .where(eq(stockMovements.stockEntryId, id))
+    .where(and(eq(stockMovements.shopId, shopId), eq(stockMovements.stockEntryId, id)))
     .orderBy(stockMovements.seq);
 
   return {
@@ -112,8 +114,8 @@ export async function getStockEntry(db: Database, id: string) {
 }
 
 /** Everything that changed one item's stock, newest first. */
-export async function listItemMovements(db: Database, itemId: string, page = 1) {
-  const where = eq(stockMovements.itemId, itemId);
+export async function listItemMovements(db: Database, shopId: string, itemId: string, page = 1) {
+  const where = and(eq(stockMovements.shopId, shopId), eq(stockMovements.itemId, itemId));
   const [rows, [{ total }]] = await Promise.all([
     db
       .select({
@@ -156,7 +158,11 @@ export async function listItemMovements(db: Database, itemId: string, page = 1) 
 }
 
 /** Cost of the most recent stock-in for each item (pre-fills the cost box for the owner). */
-export async function lastCosts(db: Database, itemIds: string[]): Promise<Map<string, number>> {
+export async function lastCosts(
+  db: Database,
+  shopId: string,
+  itemIds: string[],
+): Promise<Map<string, number>> {
   if (itemIds.length === 0) return new Map();
   const rows = await db
     .selectDistinctOn([stockMovements.itemId], {
@@ -164,7 +170,13 @@ export async function lastCosts(db: Database, itemIds: string[]): Promise<Map<st
       unitCostPaise: stockMovements.unitCostPaise,
     })
     .from(stockMovements)
-    .where(and(inArray(stockMovements.itemId, itemIds), eq(stockMovements.type, "IN")))
+    .where(
+      and(
+        eq(stockMovements.shopId, shopId),
+        inArray(stockMovements.itemId, itemIds),
+        eq(stockMovements.type, "IN"),
+      ),
+    )
     .orderBy(stockMovements.itemId, desc(stockMovements.createdAt));
   return new Map(rows.map((r) => [r.itemId, r.unitCostPaise ?? 0]));
 }

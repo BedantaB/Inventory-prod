@@ -17,14 +17,21 @@ import {
 } from "@/components/ui/dialog";
 import { format } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
+import type { ActionResult } from "@/lib/forms";
 import { resetUserPassword } from "../actions";
-import type { UserRow } from "../queries";
 import { resetUserPasswordSchema } from "../schemas";
 
-export function ResetPasswordDialog({ user }: { user: UserRow }) {
+/** `action` defaults to the owner resetting a staff password; the platform admin passes its own. */
+export function ResetPasswordDialog({
+  user,
+  action = resetUserPassword,
+}: {
+  user: { id: string; fullName: string };
+  action?: (userId: string, formData: FormData) => Promise<ActionResult>;
+}) {
   const m = useMessages();
   const [open, setOpen] = useState(false);
-  const { pending, errorFor, formProps } = useServerForm(resetUserPassword.bind(null, user.id), {
+  const { pending, errorFor, formProps } = useServerForm(action.bind(null, user.id), {
     schema: resetUserPasswordSchema,
     onSuccess: () => setOpen(false),
   });

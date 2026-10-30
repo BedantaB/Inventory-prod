@@ -3,13 +3,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
 import { importContext, importItems, listBrands, listItems } from "@/features/items/data";
 import { checkImport } from "@/features/items/import";
-import { createTestDb, createUser, type TestDb } from "./test-db";
+import { createTestDb, createUser, defaultShopId, type TestDb } from "./test-db";
 
 let db: TestDb;
+let shopId: string;
 let ownerId: string;
 
 beforeAll(async () => {
   ({ db } = await createTestDb());
+  shopId = await defaultShopId(db);
   ownerId = (await createUser(db, { username: "owner", role: "ADMIN" })).id;
 });
 
@@ -21,18 +23,18 @@ Notebook,,Classmate,Books,pcs,172 pages,60,52,,,,
 
 describe("importItems", () => {
   it("adds every row, creates brands and categories once, and books opening stock", async () => {
-    const check = checkImport(CSV, await importContext(db));
+    const check = checkImport(CSV, await importContext(db, shopId));
     expect(check.problems).toEqual([]);
 
-    const result = await importItems(db, check.rows, ownerId, "Opening stock (imported)");
+    const result = await importItems(db, shopId, check.rows, ownerId, "Opening stock (imported)");
     expect(result).toEqual({ items: 3, withStock: 2, brands: 2, categories: 2 });
 
-    const { rows } = await listItems(db, { q: "permanent marker" });
+    const { rows } = await listItems(db, shopId, { q: "permanent marker" });
     expect(rows.map((r) => [r.variant, r.stockMilli, r.avgCostPaise, r.brandName])).toEqual([
       ["Black", 100_000, 1400, "DOMS"],
       ["Blue", 200_000, 1400, "DOMS"],
     ]);
-    expect((await listBrands(db)).map((b) => b.name)).toEqual(["Classmate", "DOMS"]);
+    expect((await listBrands(db, shopId)).map((b) => b.name)).toEqual(["Classmate", "DOMS"]);
 
     const entries = await db
       .select()
@@ -42,7 +44,7 @@ describe("importItems", () => {
   });
 
   it("then refuses the same file again", async () => {
-    const check = checkImport(CSV, await importContext(db));
+    const check = checkImport(CSV, await importContext(db, shopId));
     expect(check.rows).toEqual([]);
     expect(check.problems.map((p) => p.key)).toEqual([
       "import.skuExists",
@@ -54,19 +56,20 @@ describe("importItems", () => {
   });
 
   it("adds nothing if any row fails in the database", async () => {
-    const before = (await listItems(db, {})).total;
+    const before = (await listItems(db, shopId, {})).total;
     const check = checkImport(
       `Name,Unit,SKU\nNew Pen,pcs,PEN-1\nAnother Pen,pcs,PEN-2`,
-      await importContext(db),
+      await importContext(db, shopId),
     );
     // Simulate something changing between check and import: the second SKU gets taken.
     await db.insert(schema.items).values({
+      shopId,
       name: "Sneaky",
       sku: "PEN-2",
       unitId: check.rows[0].unitId,
       createdBy: ownerId,
     });
-    await expect(importItems(db, check.rows, ownerId, "x")).rejects.toThrow();
-    expect((await listItems(db, {})).total).toBe(before + 1); // only "Sneaky"
+    await expect(importItems(db, shopId, check.rows, ownerId, "x")).rejects.toThrow();
+    expect((await listItems(db, shopId, {})).total).toBe(before + 1); // only "Sneaky"
   });
 });

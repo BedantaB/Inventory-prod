@@ -46,7 +46,12 @@ async function shellUser(): Promise<NonNullable<ShellUser>> {
   const session = await getSession();
   if (session.status === "signed-out") redirect("/login");
   if (session.status === "inactive") redirect("/auth/signout?reason=inactive");
-  return { fullName: session.user.fullName, isAdmin: session.user.role === "ADMIN" };
+  if (session.status === "platform") redirect("/platform");
+  return {
+    fullName: session.user.fullName,
+    isAdmin: session.user.role === "ADMIN",
+    shopName: session.user.shopName,
+  };
 }
 
 async function SidebarWithUser() {

@@ -7,6 +7,7 @@ import {
   createItem,
   createTestDb,
   createUser,
+  defaultShopId,
   expectPgError,
   getItem,
   stockIn,
@@ -14,15 +15,17 @@ import {
 } from "./test-db";
 
 let db: TestDb;
+let shopId: string;
 let userId: string;
 
 beforeAll(async () => {
   ({ db } = await createTestDb());
+  shopId = await defaultShopId(db);
   userId = (await createUser(db, { username: "owner", role: "ADMIN" })).id;
 });
 
 async function createDraftOrder() {
-  const [order] = await db.insert(schema.orders).values({ createdBy: userId }).returning();
+  const [order] = await db.insert(schema.orders).values({ shopId, createdBy: userId }).returning();
   return order;
 }
 
@@ -31,6 +34,7 @@ async function stockOut(itemId: string, qtyMilli: number, unitPricePaise: number
   const [movement] = await db
     .insert(schema.stockMovements)
     .values({
+      shopId,
       type: "OUT",
       itemId,
       quantityChange: qtyToDb(-qtyMilli),
@@ -122,6 +126,7 @@ describe("guards", () => {
     const unit = await db.query.units.findFirst();
     await expectPgError(
       db.insert(schema.items).values({
+        shopId,
         name: "Sneaky item",
         unitId: unit!.id,
         currentStock: "5.000",

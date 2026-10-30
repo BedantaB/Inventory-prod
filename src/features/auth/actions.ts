@@ -3,14 +3,14 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getDb } from "@/db";
-import { profiles } from "@/db/schema";
+import { profiles, shops } from "@/db/schema";
 import { serverEnv } from "@/lib/env.server";
 import { failure, parseForm, success, type ActionResult } from "@/lib/forms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loginEmail } from "@/features/users/login-identity";
 import { safeNextPath } from "./paths";
 import { forgotPasswordSchema, loginSchema, newPasswordSchema } from "./schemas";
-import { requireUser } from "./session";
+import { requireSignedIn } from "./session";
 
 export async function login(formData: FormData): Promise<ActionResult> {
   const parsed = parseForm(loginSchema, formData);
@@ -31,15 +31,21 @@ export async function login(formData: FormData): Promise<ActionResult> {
   }
 
   const [profile] = await getDb()
-    .select({ isActive: profiles.isActive })
+    .select({
+      isActive: profiles.isActive,
+      isPlatformAdmin: profiles.isPlatformAdmin,
+      shopActive: shops.isActive,
+    })
     .from(profiles)
+    .leftJoin(shops, eq(profiles.shopId, shops.id))
     .where(eq(profiles.id, data.user.id));
-  if (!profile?.isActive) {
+  // A login whose whole shop has been turned off can't sign in either.
+  if (!profile?.isActive || (!profile.isPlatformAdmin && !profile.shopActive)) {
     await supabase.auth.signOut();
     return failure("auth.accountInactive");
   }
 
-  redirect(safeNextPath(next));
+  redirect(profile.isPlatformAdmin ? "/platform" : safeNextPath(next));
 }
 
 export async function logout() {
@@ -66,7 +72,7 @@ export async function requestPasswordReset(formData: FormData): Promise<ActionRe
 
 /** Sets a new password for the logged-in user (after opening the reset link). */
 export async function updateOwnPassword(formData: FormData): Promise<ActionResult> {
-  await requireUser();
+  await requireSignedIn();
   const parsed = parseForm(newPasswordSchema, formData);
   if (!parsed.ok) return parsed.result;
 

@@ -3,23 +3,29 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import * as data from "./data";
 
-export function listItems(params: data.ItemListParams) {
-  return data.listItems(getDb(), params);
+// Every query takes the shop of the logged-in user (from requireUser()).
+
+export function listItems(shopId: string, params: data.ItemListParams) {
+  return data.listItems(getDb(), shopId, params);
 }
 
-export async function getItem(id: string) {
+export async function getItem(shopId: string, id: string) {
   if (!z.uuid().safeParse(id).success) return null;
-  return data.getItem(getDb(), id);
+  return data.getItem(getDb(), shopId, id);
 }
 
-export function listCategories() {
-  return data.listCategories(getDb());
+export function photoBelongsToShop(shopId: string, path: string) {
+  return data.photoBelongsToShop(getDb(), shopId, path);
 }
 
-export function listBrands() {
-  return data.listBrands(getDb());
+export function listCategories(shopId: string) {
+  return data.listCategories(getDb(), shopId);
 }
 
-export function listUnits() {
-  return data.listUnits(getDb());
+export function listBrands(shopId: string) {
+  return data.listBrands(getDb(), shopId);
+}
+
+export function listUnits(shopId: string) {
+  return data.listUnits(getDb(), shopId);
 }

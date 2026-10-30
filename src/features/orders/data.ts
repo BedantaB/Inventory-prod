@@ -33,15 +33,21 @@ import { orderTotals, type DiscountKind } from "./totals";
 
 // Orders: drafts (the cart), checkout, and completed orders. Takes `db` so it can be tested
 // with PGlite. "Customer" = the vendors table.
+// Every function takes the shop: it only ever reads and writes that shop's rows.
 
 // ---------------------------------------------------------------------------------------------
 // Drafts (the cart)
 // ---------------------------------------------------------------------------------------------
 
-export async function createDraft(db: Database, actorId: string, vendorId: string | null = null) {
+export async function createDraft(
+  db: Database,
+  shopId: string,
+  actorId: string,
+  vendorId: string | null = null,
+) {
   const [order] = await db
     .insert(orders)
-    .values({ vendorId, createdBy: actorId })
+    .values({ shopId, vendorId, createdBy: actorId })
     .returning({ id: orders.id });
   return order;
 }
@@ -112,7 +118,7 @@ function toDraftLine(r: LineRow, showCost: boolean): DraftLine {
   };
 }
 
-export async function getDraft(db: Database, orderId: string, showCost: boolean) {
+export async function getDraft(db: Database, shopId: string, orderId: string, showCost: boolean) {
   const [order] = await db
     .select({
       id: orders.id,
@@ -129,7 +135,7 @@ export async function getDraft(db: Database, orderId: string, showCost: boolean)
     .from(orders)
     .innerJoin(profiles, eq(orders.createdBy, profiles.id))
     .leftJoin(vendors, eq(orders.vendorId, vendors.id))
-    .where(eq(orders.id, orderId));
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId)));
   if (!order || order.status !== "DRAFT") return null;
 
   const rows = await selectLines(db)
@@ -156,21 +162,36 @@ export async function getDraft(db: Database, orderId: string, showCost: boolean)
 
 export type DraftView = NonNullable<Awaited<ReturnType<typeof getDraft>>>;
 
-/** Locks the draft row; returns false if it's missing or already completed. */
-async function lockDraft(db: Database, orderId: string): Promise<boolean> {
+/**
+ * Locks the draft row; returns false if it's missing, belongs to another shop, or is already
+ * completed. Everything that changes a draft goes through this first.
+ */
+async function lockDraft(db: Database, shopId: string, orderId: string): Promise<boolean> {
   const [row] = await db
     .select({ status: orders.status })
     .from(orders)
-    .where(eq(orders.id, orderId))
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId)))
     .for("update");
   return row?.status === "DRAFT";
 }
 
 export type DraftResult = "ok" | "not-found";
 
-export async function setDraftCustomer(db: Database, orderId: string, vendorId: string | null) {
+export async function setDraftCustomer(
+  db: Database,
+  shopId: string,
+  orderId: string,
+  vendorId: string | null,
+) {
   return db.transaction(async (tx): Promise<DraftResult> => {
-    if (!(await lockDraft(tx, orderId))) return "not-found";
+    if (!(await lockDraft(tx, shopId, orderId))) return "not-found";
+    if (vendorId) {
+      const [customer] = await tx
+        .select({ id: vendors.id })
+        .from(vendors)
+        .where(and(eq(vendors.shopId, shopId), eq(vendors.id, vendorId)));
+      if (!customer) return "not-found";
+    }
     await tx.update(orders).set({ vendorId }).where(eq(orders.id, orderId));
     return "ok";
   });
@@ -178,12 +199,13 @@ export async function setDraftCustomer(db: Database, orderId: string, vendorId: 
 
 export async function setDraftDiscount(
   db: Database,
+  shopId: string,
   orderId: string,
   kind: DiscountKind,
   value: number,
 ) {
   return db.transaction(async (tx): Promise<DraftResult> => {
-    if (!(await lockDraft(tx, orderId))) return "not-found";
+    if (!(await lockDraft(tx, shopId, orderId))) return "not-found";
     await tx
       .update(orders)
       .set({ discountKind: kind, discountValue: value })
@@ -198,13 +220,14 @@ export async function setDraftDiscount(
  */
 export async function addDraftLine(
   db: Database,
+  shopId: string,
   orderId: string,
   itemId: string,
   actorId: string,
   showCost: boolean,
 ) {
   return db.transaction(async (tx) => {
-    if (!(await lockDraft(tx, orderId))) return { status: "not-found" as const };
+    if (!(await lockDraft(tx, shopId, orderId))) return { status: "not-found" as const };
     const [item] = await tx
       .select({
         id: items.id,
@@ -212,7 +235,7 @@ export async function addDraftLine(
         sellingPricePaise: items.sellingPricePaise,
       })
       .from(items)
-      .where(eq(items.id, itemId));
+      .where(and(eq(items.shopId, shopId), eq(items.id, itemId)));
     if (!item || item.archivedAt) return { status: "item-unavailable" as const };
 
     const [existing] = await tx
@@ -235,6 +258,7 @@ export async function addDraftLine(
       const [line] = await tx
         .insert(orderLines)
         .values({
+          shopId,
           orderId,
           itemId,
           quantity: qtyToDb(QTY_SCALE),
@@ -253,12 +277,13 @@ export async function addDraftLine(
 /** Saves quantity and price for one cart line. Price may be empty (null) while it's a draft. */
 export async function updateDraftLine(
   db: Database,
+  shopId: string,
   orderId: string,
   lineId: string,
   input: { qtyMilli: number; unitPricePaise: number | null },
 ) {
   return db.transaction(async (tx) => {
-    if (!(await lockDraft(tx, orderId))) return "not-found" as const;
+    if (!(await lockDraft(tx, shopId, orderId))) return "not-found" as const;
     const [line] = await tx
       .select({ allowsDecimal: units.allowsDecimal })
       .from(orderLines)
@@ -276,9 +301,14 @@ export async function updateDraftLine(
   });
 }
 
-export async function removeDraftLine(db: Database, orderId: string, lineId: string) {
+export async function removeDraftLine(
+  db: Database,
+  shopId: string,
+  orderId: string,
+  lineId: string,
+) {
   return db.transaction(async (tx): Promise<DraftResult> => {
-    if (!(await lockDraft(tx, orderId))) return "not-found";
+    if (!(await lockDraft(tx, shopId, orderId))) return "not-found";
     await tx
       .delete(orderLines)
       .where(and(eq(orderLines.id, lineId), eq(orderLines.orderId, orderId)));
@@ -287,16 +317,16 @@ export async function removeDraftLine(db: Database, orderId: string, lineId: str
 }
 
 /** Throws away an unfinished order. Completed orders can never be deleted (database trigger). */
-export async function discardDraft(db: Database, orderId: string) {
+export async function discardDraft(db: Database, shopId: string, orderId: string) {
   const deleted = await db
     .delete(orders)
-    .where(and(eq(orders.id, orderId), eq(orders.status, "DRAFT")))
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), eq(orders.status, "DRAFT")))
     .returning({ id: orders.id });
   return deleted.length > 0;
 }
 
 /** Unfinished orders anyone can pick up, most recently changed first. */
-export async function listDrafts(db: Database) {
+export async function listDrafts(db: Database, shopId: string) {
   return db
     .select({
       id: orders.id,
@@ -311,7 +341,7 @@ export async function listDrafts(db: Database) {
     .from(orders)
     .innerJoin(profiles, eq(orders.createdBy, profiles.id))
     .leftJoin(vendors, eq(orders.vendorId, vendors.id))
-    .where(eq(orders.status, "DRAFT"))
+    .where(and(eq(orders.shopId, shopId), eq(orders.status, "DRAFT")))
     .orderBy(desc(orders.updatedAt))
     .limit(50);
 }
@@ -356,6 +386,7 @@ export type CheckoutResult =
  */
 export async function checkoutDraft(
   db: Database,
+  shopId: string,
   orderId: string,
   actorId: string,
   at: Date = new Date(),
@@ -371,7 +402,7 @@ export async function checkoutDraft(
         discountValue: orders.discountValue,
       })
       .from(orders)
-      .where(eq(orders.id, orderId))
+      .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId)))
       .for("update");
     if (!order) return { status: "not-found" };
     if (order.status === "COMPLETED") {
@@ -385,7 +416,7 @@ export async function checkoutDraft(
       const [vendor] = await tx
         .select({ archivedAt: vendors.archivedAt })
         .from(vendors)
-        .where(eq(vendors.id, order.vendorId));
+        .where(and(eq(vendors.shopId, shopId), eq(vendors.id, order.vendorId)));
       if (!vendor || vendor.archivedAt) problems.push({ key: "orders.customerArchived" });
     }
 
@@ -422,7 +453,7 @@ export async function checkoutDraft(
             })
             .from(items)
             .innerJoin(units, eq(items.unitId, units.id))
-            .where(inArray(items.id, itemIds))
+            .where(and(eq(items.shopId, shopId), inArray(items.id, itemIds)))
             .orderBy(asc(items.id))
             .for("update", { of: items });
     const itemById = new Map(lockedItems.map((i) => [i.id, i]));
@@ -467,9 +498,9 @@ export async function checkoutDraft(
     const fy = financialYear(at);
     const [counter] = await tx
       .insert(orderCounters)
-      .values({ financialYear: fy, lastValue: 1 })
+      .values({ shopId, financialYear: fy, lastValue: 1 })
       .onConflictDoUpdate({
-        target: orderCounters.financialYear,
+        target: [orderCounters.shopId, orderCounters.financialYear],
         set: { lastValue: sql`${orderCounters.lastValue} + 1` },
       })
       .returning({ lastValue: orderCounters.lastValue });
@@ -479,6 +510,7 @@ export async function checkoutDraft(
       const [movement] = await tx
         .insert(stockMovements)
         .values({
+          shopId,
           type: "OUT",
           itemId: line.itemId,
           quantityChange: qtyToDb(-line.qtyMilli),
@@ -518,7 +550,7 @@ export async function checkoutDraft(
 // Completed orders
 // ---------------------------------------------------------------------------------------------
 
-export async function getOrder(db: Database, orderId: string, showCost: boolean) {
+export async function getOrder(db: Database, shopId: string, orderId: string, showCost: boolean) {
   const [order] = await db
     .select({
       id: orders.id,
@@ -541,7 +573,7 @@ export async function getOrder(db: Database, orderId: string, showCost: boolean)
     .from(orders)
     .innerJoin(vendors, eq(orders.vendorId, vendors.id))
     .innerJoin(profiles, eq(orders.completedBy, profiles.id))
-    .where(and(eq(orders.id, orderId), eq(orders.status, "COMPLETED")));
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), eq(orders.status, "COMPLETED")));
   if (!order) return null;
 
   const lines = await db
@@ -583,11 +615,16 @@ export async function getOrder(db: Database, orderId: string, showCost: boolean)
 
 export type OrderView = NonNullable<Awaited<ReturnType<typeof getOrder>>>;
 
-export async function setOrderArchived(db: Database, orderId: string, archived: boolean) {
+export async function setOrderArchived(
+  db: Database,
+  shopId: string,
+  orderId: string,
+  archived: boolean,
+) {
   const [row] = await db
     .update(orders)
     .set({ archivedAt: archived ? new Date() : null })
-    .where(and(eq(orders.id, orderId), eq(orders.status, "COMPLETED")))
+    .where(and(eq(orders.shopId, shopId), eq(orders.id, orderId), eq(orders.status, "COMPLETED")))
     .returning({ id: orders.id, orderNumber: orders.orderNumber });
   return row ?? null;
 }
@@ -603,9 +640,10 @@ export type OrderListParams = {
 };
 
 /** Completed orders, newest first. Search matches order number, customer name, phone or city. */
-export async function listOrders(db: Database, params: OrderListParams) {
+export async function listOrders(db: Database, shopId: string, params: OrderListParams) {
   const page = params.page ?? 1;
   const conditions: (SQL | undefined)[] = [
+    eq(orders.shopId, shopId),
     eq(orders.status, "COMPLETED"),
     params.archived ? isNotNull(orders.archivedAt) : isNull(orders.archivedAt),
   ];
@@ -663,8 +701,8 @@ export async function listOrders(db: Database, params: OrderListParams) {
 }
 
 /** Customers for the order picker (search as you type). */
-export async function searchCustomers(db: Database, query: string, limit = 10) {
-  const conditions: (SQL | undefined)[] = [isNull(vendors.archivedAt)];
+export async function searchCustomers(db: Database, shopId: string, query: string, limit = 10) {
+  const conditions: (SQL | undefined)[] = [eq(vendors.shopId, shopId), isNull(vendors.archivedAt)];
   for (const pattern of searchPatterns(query)) {
     conditions.push(
       or(

@@ -64,7 +64,7 @@ export function BottomNav({ user }: { user: ShellUser }) {
               className="rounded-t-2xl pb-[calc(1rem+env(safe-area-inset-bottom))]"
             >
               <SheetHeader>
-                <SheetTitle className="text-lg">{m.nav.menu}</SheetTitle>
+                <SheetTitle className="text-lg">{user?.shopName || m.nav.menu}</SheetTitle>
                 {user && (
                   <p className="text-sm text-muted-foreground">
                     {format(m.nav.loggedInAs, { name: user.fullName })}

@@ -20,7 +20,12 @@ const notFound = () => failure("orders.notFound");
 /** "Start new order" (optionally for a customer). Opens the cart. */
 export async function startOrderAction(customerId: string | null): Promise<void> {
   const actor = await requireUser();
-  const { id } = await data.createDraft(getDb(), actor.id, isUuid(customerId) ? customerId : null);
+  const { id } = await data.createDraft(
+    getDb(),
+    actor.shopId,
+    actor.id,
+    isUuid(customerId) ? customerId : null,
+  );
   revalidatePath("/orders/new");
   redirect(`/orders/${id}`);
 }
@@ -29,17 +34,17 @@ export async function setCustomerAction(
   orderId: string,
   customerId: string | null,
 ): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(orderId) || (customerId !== null && !isUuid(customerId))) return notFound();
-  const result = await data.setDraftCustomer(getDb(), orderId, customerId);
+  const result = await data.setDraftCustomer(getDb(), actor.shopId, orderId, customerId);
   return result === "ok" ? success() : notFound();
 }
 
 export async function searchCustomersAction(query: string) {
-  await requireUser();
+  const actor = await requireUser();
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
-  return data.searchCustomers(getDb(), q);
+  return data.searchCustomers(getDb(), actor.shopId, q);
 }
 
 export async function addItemAction(
@@ -50,6 +55,7 @@ export async function addItemAction(
   if (!isUuid(orderId) || !isUuid(itemId)) return notFound();
   const result = await data.addDraftLine(
     getDb(),
+    actor.shopId,
     orderId,
     itemId,
     actor.id,
@@ -67,7 +73,7 @@ export async function updateLineAction(
   quantity: string,
   unitPrice: string,
 ): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(orderId) || !isUuid(lineId)) return notFound();
   const qtyMilli = parseQty(quantity, { allowDecimal: true });
   if (qtyMilli === null || qtyMilli <= 0) return failure("stock.invalidQuantity");
@@ -77,15 +83,20 @@ export async function updateLineAction(
     if (unitPricePaise === null) return failure("items.invalidPrice");
     if (unitPricePaise > MAX_PRICE_PAISE) return failure("validation.tooLarge");
   }
-  const result = await data.updateDraftLine(getDb(), orderId, lineId, { qtyMilli, unitPricePaise });
+  const result = await data.updateDraftLine(getDb(), actor.shopId, orderId, lineId, {
+    qtyMilli,
+    unitPricePaise,
+  });
   if (result === "decimal-not-allowed") return failure("items.decimalNotAllowed");
   return result === "ok" ? success() : notFound();
 }
 
 export async function removeLineAction(orderId: string, lineId: string): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(orderId) || !isUuid(lineId)) return notFound();
-  return (await data.removeDraftLine(getDb(), orderId, lineId)) === "ok" ? success() : notFound();
+  return (await data.removeDraftLine(getDb(), actor.shopId, orderId, lineId)) === "ok"
+    ? success()
+    : notFound();
 }
 
 export async function setDiscountAction(
@@ -93,20 +104,20 @@ export async function setDiscountAction(
   kind: DiscountKind,
   value: string,
 ): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(orderId) || (kind !== "AMOUNT" && kind !== "PERCENT")) return notFound();
   const text = value.trim() === "" ? "0" : value;
   const parsed = kind === "AMOUNT" ? rupeesToPaise(text) : parsePercent(text);
   if (parsed === null || parsed > MAX_PRICE_PAISE) return failure("orders.invalidDiscount");
-  return (await data.setDraftDiscount(getDb(), orderId, kind, parsed)) === "ok"
+  return (await data.setDraftDiscount(getDb(), actor.shopId, orderId, kind, parsed)) === "ok"
     ? success()
     : notFound();
 }
 
 export async function discardOrderAction(orderId: string): Promise<ActionResult> {
-  await requireUser();
+  const actor = await requireUser();
   if (!isUuid(orderId)) return notFound();
-  if (!(await data.discardDraft(getDb(), orderId))) return notFound();
+  if (!(await data.discardDraft(getDb(), actor.shopId, orderId))) return notFound();
   revalidatePath("/orders/new");
   return success("orders.discarded");
 }
@@ -119,7 +130,7 @@ export type CheckoutActionResult =
 export async function checkoutAction(orderId: string): Promise<CheckoutActionResult> {
   const actor = await requireUser();
   if (!isUuid(orderId)) return { ok: false, message: { key: "orders.notFound" } };
-  const result = await data.checkoutDraft(getDb(), orderId, actor.id);
+  const result = await data.checkoutDraft(getDb(), actor.shopId, orderId, actor.id);
 
   switch (result.status) {
     case "completed":
@@ -148,7 +159,7 @@ export async function setOrderArchivedAction(
   const actor = await requireUser();
   if (!can(actor, "archive")) return failure("errors.adminOnly");
   if (!isUuid(orderId)) return notFound();
-  const order = await data.setOrderArchived(getDb(), orderId, archived);
+  const order = await data.setOrderArchived(getDb(), actor.shopId, orderId, archived);
   if (!order) return notFound();
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);

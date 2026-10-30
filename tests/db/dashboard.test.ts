@@ -4,18 +4,20 @@ import { seedBusinessData } from "@/db/seed/business-data";
 import { seedItems, seedOrders } from "@/db/seed/data";
 import { getDashboard, istToday } from "@/features/dashboard/data";
 import { createDraft } from "@/features/orders/data";
-import { createTestDb, createUser, type TestDb } from "./test-db";
+import { createTestDb, createUser, defaultShopId, type TestDb } from "./test-db";
 
 let db: TestDb;
+let shopId: string;
 let ownerId: string;
 
 beforeAll(async () => {
   ({ db } = await createTestDb());
+  shopId = await defaultShopId(db);
   ownerId = (await createUser(db, { username: "owner", role: "ADMIN" })).id;
   const ramesh = (await createUser(db, { username: "ramesh", fullName: "Ramesh Kumar" })).id;
   const sunita = (await createUser(db, { username: "sunita", fullName: "Sunita Devi" })).id;
-  await seedBusinessData(db, { owner: ownerId, ramesh, sunita });
-  await createDraft(db, ownerId);
+  await seedBusinessData(db, shopId, { owner: ownerId, ramesh, sunita });
+  await createDraft(db, shopId, ownerId);
 });
 
 describe("istToday", () => {
@@ -28,7 +30,7 @@ describe("istToday", () => {
 
 describe("getDashboard", () => {
   it("adds up items, stock value, warnings, today's sales and unfinished orders", async () => {
-    const dashboard = await getDashboard(db, { now: new Date(), showCost: true });
+    const dashboard = await getDashboard(db, shopId, { now: new Date(), showCost: true });
     expect(dashboard.activeItems).toBe(seedItems.length);
     expect(dashboard.outCount).toBe(4);
     expect(dashboard.lowCount).toBe(5);
@@ -50,7 +52,7 @@ describe("getDashboard", () => {
   });
 
   it("lists recent stock bills and orders together, newest first", async () => {
-    const { recent } = await getDashboard(db, { now: new Date(), showCost: true });
+    const { recent } = await getDashboard(db, shopId, { now: new Date(), showCost: true });
     expect(recent).toHaveLength(8);
     const times = recent.map((r) => r.at.getTime());
     expect(times).toEqual([...times].sort((a, b) => b - a));
@@ -59,10 +61,10 @@ describe("getDashboard", () => {
   });
 
   it("leaves archived items out of the low-stock list", async () => {
-    const before = await getDashboard(db, { now: new Date(), showCost: true });
+    const before = await getDashboard(db, shopId, { now: new Date(), showCost: true });
     const outItem = before.lowStock[0]; // out of stock, listed first
     await db.execute(sql`UPDATE items SET archived_at = now() WHERE id = ${outItem.id}`);
-    const after = await getDashboard(db, { now: new Date(), showCost: true });
+    const after = await getDashboard(db, shopId, { now: new Date(), showCost: true });
     expect(after.lowStock.map((i) => i.id)).not.toContain(outItem.id);
     expect(after.outCount).toBe(before.outCount - 1);
     await db.execute(sql`UPDATE items SET archived_at = NULL WHERE id = ${outItem.id}`);
@@ -70,7 +72,7 @@ describe("getDashboard", () => {
 
   it("hides stock value from staff", async () => {
     expect(
-      (await getDashboard(db, { now: new Date(), showCost: false })).stockValuePaise,
+      (await getDashboard(db, shopId, { now: new Date(), showCost: false })).stockValuePaise,
     ).toBeNull();
   });
 });

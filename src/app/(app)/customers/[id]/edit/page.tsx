@@ -21,8 +21,8 @@ export default function EditCustomerPage({ params }: PageProps<"/customers/[id]/
 
 async function EditCustomer({ params }: Pick<PageProps<"/customers/[id]/edit">, "params">) {
   const m = getMessages();
-  await requireUser();
-  const customer = await getCustomer((await params).id);
+  const user = await requireUser();
+  const customer = await getCustomer(user.shopId, (await params).id);
   if (!customer) notFound();
   if (customer.archivedAt) redirect(`/customers/${customer.id}`);
   return (

@@ -79,8 +79,8 @@ async function OrdersResults({ searchParams }: Pick<PageProps<"/orders">, "searc
       parseChoice(sp.view, ["active", "archived"] as const, "active") === "archived",
   };
   const [list, customer] = await Promise.all([
-    listOrders(params),
-    customerId ? getCustomer(customerId) : null,
+    listOrders(user.shopId, params),
+    customerId ? getCustomer(user.shopId, customerId) : null,
   ]);
   const filtered = Boolean(params.q || customerId || from || toStart || params.archived);
 

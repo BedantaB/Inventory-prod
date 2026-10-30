@@ -37,10 +37,11 @@ function revalidateItems(id?: string) {
 
 /** Checks the unit exists and the quantities fit it (no 2.5 for "pcs"). */
 async function checkUnit(
+  shopId: string,
   input: ItemInput,
   currentStockMilli = 0,
 ): Promise<ActionResult<never> | null> {
-  const unit = await data.getUnit(getDb(), input.unitId);
+  const unit = await data.getUnit(getDb(), shopId, input.unitId);
   if (!unit || unit.archivedAt) return fieldFailure("unitId", "validation.invalidChoice");
   if (!unit.allowsDecimal) {
     if (currentStockMilli % QTY_SCALE !== 0) {
@@ -72,7 +73,7 @@ export async function createItemAction(formData: FormData): Promise<ActionResult
   if (!parsed.ok) return parsed.result;
   const input = parsed.data;
 
-  const unitProblem = await checkUnit(input);
+  const unitProblem = await checkUnit(actor.shopId, input);
   if (unitProblem) return unitProblem;
 
   const photo = await handleNewPhoto(formData);
@@ -81,6 +82,7 @@ export async function createItemAction(formData: FormData): Promise<ActionResult
   try {
     const item = await data.createItem(
       getDb(),
+      actor.shopId,
       {
         ...fieldsFrom(input),
         // Anyone may set prices when creating; only the owner may change them later.
@@ -106,7 +108,7 @@ export async function updateItemAction(itemId: string, formData: FormData): Prom
   const actor = await requireUser();
   if (!isUuid(itemId)) return failure("errors.notFound");
   const db = getDb();
-  const existing = await data.getItem(db, itemId);
+  const existing = await data.getItem(db, actor.shopId, itemId);
   if (!existing) return failure("errors.notFound");
   if (existing.archivedAt) return failure("errors.archivedRecord");
 
@@ -123,7 +125,7 @@ export async function updateItemAction(itemId: string, formData: FormData): Prom
     return fieldFailure("sellingPrice", "items.priceOwnerOnly");
   }
 
-  const unitProblem = await checkUnit(input, existing.stockMilli);
+  const unitProblem = await checkUnit(actor.shopId, input, existing.stockMilli);
   if (unitProblem) return unitProblem;
 
   const photo = await handleNewPhoto(formData);
@@ -131,7 +133,7 @@ export async function updateItemAction(itemId: string, formData: FormData): Prom
   const photoPath = photo.path ?? (input.removePhoto ? null : undefined);
 
   try {
-    await data.updateItem(db, itemId, {
+    await data.updateItem(db, actor.shopId, itemId, {
       ...fieldsFrom(input),
       sellingPricePaise: canEditPrice ? input.sellingPrice : undefined,
       mrpPaise: canEditPrice ? input.mrp : undefined,
@@ -156,7 +158,7 @@ export async function setItemArchivedAction(
   const actor = await requireUser();
   if (!can(actor, "archive")) return failure("errors.adminOnly");
   if (!isUuid(itemId)) return failure("errors.notFound");
-  const item = await data.setItemArchived(getDb(), itemId, archived);
+  const item = await data.setItemArchived(getDb(), actor.shopId, itemId, archived);
   if (!item) return failure("errors.notFound");
   revalidateItems(itemId);
   return success(archived ? "items.archivedDone" : "items.unarchivedDone", { name: item.name });
@@ -168,7 +170,12 @@ export async function createCategoryAction(
   const actor = await requireUser();
   const parsed = parseForm(categorySchema, formData);
   if (!parsed.ok) return parsed.result;
-  const category = await data.findOrCreateCategory(getDb(), parsed.data.name, actor.id);
+  const category = await data.findOrCreateCategory(
+    getDb(),
+    actor.shopId,
+    parsed.data.name,
+    actor.id,
+  );
   return category.existed
     ? success("items.categoryExists", undefined, { id: category.id, name: category.name })
     : success(
@@ -184,7 +191,7 @@ export async function createBrandAction(
   const actor = await requireUser();
   const parsed = parseForm(categorySchema, formData);
   if (!parsed.ok) return parsed.result;
-  const brand = await data.findOrCreateBrand(getDb(), parsed.data.name, actor.id);
+  const brand = await data.findOrCreateBrand(getDb(), actor.shopId, parsed.data.name, actor.id);
   return brand.existed
     ? success("items.brandExists", undefined, { id: brand.id, name: brand.name })
     : success("items.brandCreated", { name: brand.name }, { id: brand.id, name: brand.name });
@@ -196,7 +203,7 @@ export async function createUnitAction(formData: FormData): Promise<ActionResult
   const parsed = parseForm(unitSchema, formData);
   if (!parsed.ok) return parsed.result;
   try {
-    const unit = await data.createUnit(getDb(), parsed.data, actor.id);
+    const unit = await data.createUnit(getDb(), actor.shopId, parsed.data, actor.id);
     revalidatePath("/items/units");
     return success("units.created", { name: unit.name });
   } catch (error) {
@@ -213,7 +220,7 @@ export async function updateUnitAction(unitId: string, formData: FormData): Prom
   const parsed = parseForm(unitSchema, formData);
   if (!parsed.ok) return parsed.result;
   try {
-    const result = await data.updateUnit(getDb(), unitId, parsed.data);
+    const result = await data.updateUnit(getDb(), actor.shopId, unitId, parsed.data);
     if (result === "not-found") return failure("errors.notFound");
     if (result === "decimal-locked") return fieldFailure("allowsDecimal", "units.decimalLocked");
   } catch (error) {
@@ -246,12 +253,12 @@ export type ImportPreview = {
   totalProblems: number;
 };
 
-async function readImport(formData: FormData) {
+async function readImport(shopId: string, formData: FormData) {
   const csv = formData.get("csv");
   if (typeof csv !== "string" || csv.length === 0) return { error: "import.empty" as const };
   if (csv.length > MAX_IMPORT_BYTES) return { error: "import.tooBig" as const };
   const db = getDb();
-  const context = await data.importContext(db);
+  const context = await data.importContext(db, shopId);
   return { db, csv, check: checkImport(csv, context) };
 }
 
@@ -259,11 +266,14 @@ async function readImport(formData: FormData) {
 export async function checkImportAction(formData: FormData): Promise<ActionResult<ImportPreview>> {
   const actor = await requireUser();
   if (!can(actor, "importItems")) return failure("errors.adminOnly");
-  const read = await readImport(formData);
+  const read = await readImport(actor.shopId, formData);
   if ("error" in read) return failure(read.error!);
   const { db, check } = read;
 
-  const [brands, categories] = await Promise.all([data.listBrands(db), data.listCategories(db)]);
+  const [brands, categories] = await Promise.all([
+    data.listBrands(db, actor.shopId),
+    data.listCategories(db, actor.shopId),
+  ]);
   const countNew = (names: (string | null)[], existing: { name: string }[]) => {
     const known = new Set(existing.map((e) => e.name.toLowerCase()));
     return new Set(
@@ -302,7 +312,7 @@ export async function runImportAction(
 ): Promise<ActionResult<{ count: number }>> {
   const actor = await requireUser();
   if (!can(actor, "importItems")) return failure("errors.adminOnly");
-  const read = await readImport(formData);
+  const read = await readImport(actor.shopId, formData);
   if ("error" in read) return failure(read.error!);
   const { db, check } = read;
   if (check.problems.length > 0 || check.rows.length === 0)
@@ -311,6 +321,7 @@ export async function runImportAction(
   try {
     const result = await data.importItems(
       db,
+      actor.shopId,
       check.rows,
       actor.id,
       getMessages().import.openingStockNote,
@@ -348,10 +359,11 @@ export async function searchItemsAction(query: string): Promise<PickerItem[]> {
   const q = query.trim().slice(0, 100);
   if (q.length < 2) return [];
   const db = getDb();
-  const { rows } = await data.listItems(db, { q, limit: 10 });
+  const { rows } = await data.listItems(db, actor.shopId, { q, limit: 10 });
   const costs = can(actor, "viewCost")
     ? await lastCosts(
         db,
+        actor.shopId,
         rows.map((r) => r.id),
       )
     : new Map();

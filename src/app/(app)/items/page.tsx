@@ -69,9 +69,9 @@ async function ItemsResults({ searchParams }: Pick<PageProps<"/items">, "searchP
     archived,
   };
   const [list, categories, brands] = await Promise.all([
-    listItems(params),
-    listCategories(),
-    listBrands(),
+    listItems(user.shopId, params),
+    listCategories(user.shopId),
+    listBrands(user.shopId),
   ]);
   const filtered = Boolean(
     params.q || params.categoryId || params.brandId || params.stock !== "all" || archived,

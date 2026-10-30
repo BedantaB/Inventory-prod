@@ -32,7 +32,7 @@ async function UnitsList() {
   const m = getMessages();
   const user = await requireUser();
   if (!can(user, "manageUnits")) redirect("/?denied=1");
-  const units = await listUnits();
+  const units = await listUnits(user.shopId);
 
   return (
     <div className="flex max-w-2xl flex-col gap-4">

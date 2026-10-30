@@ -116,3 +116,61 @@ See `src/db/schema/*` and `src/db/migrations/`. Tables:
   database connection fix
 - Playwright flows for every feature
 - DEPLOYMENT.md, `pnpm owner:create`, Vercel region (Mumbai)
+
+---
+
+# Version 2 plan (approved 2026-10-30)
+
+## Decisions
+
+| Topic                          | Decision                                                                                                                                                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-shop                     | Shops are completely separate: logins, items, customers, orders, units, brands, categories and settings. One deployment and one database.                                                                                         |
+| Who creates shops              | A **platform admin** login creates shops and each shop's first owner. It cannot see any shop's data.                                                                                                                              |
+| Logins                         | **One login = one shop.** Usernames stay unique across all shops, so the login screen is unchanged.                                                                                                                               |
+| Existing data                  | Becomes the first shop, called "My Shop"; rename it on the new Shop settings page. Existing logins keep working.                                                                                                                  |
+| Shop details on printed orders | Move from `BUSINESS_*` env settings to **Shop settings** (owner).                                                                                                                                                                 |
+| Stock correction               | Owner only. The owner enters the counted quantity and a reason, which creates an `ADJUST` movement. Average cost is unchanged.                                                                                                    |
+| "Delete order"                 | **Cancel** (owner only, reason required). Stock goes back through `RETURN` movements at the original cost. The order stays visible as "Cancelled", is excluded from sales and balances, and its number stays (no gaps).           |
+| Payments                       | "Record payment" on the customer page, and an optional **"Paid now"** at checkout (cash / UPI / bank / cheque). Outstanding = completed orders − payments. Wrong payments are voided by the owner (kept on record with a reason). |
+
+## How shops are kept apart
+
+1. Every business table has `shop_id`. Every data function takes `shopId`, filters by it, and
+   writes it.
+2. **Composite foreign keys** (`(shop_id, item_id) → items(shop_id, id)` and so on). The database
+   itself refuses a row that points into another shop, such as an order line with another shop's
+   item.
+3. Uniqueness is per shop: SKU, unit, category and brand names, order numbers, and the order
+   counters for each shop and financial year.
+4. RLS policies allow reads only within the user's own shop. Turning a shop off logs all its
+   users out.
+5. Tests create **two shops** and check that no list, page, photo or action can reach the other
+   shop's data.
+
+## Phases (stop after each one for review)
+
+**Phase 6: Multi-shop foundation**
+
+- `shops` table and platform admin.
+- `shop_id` everywhere: migration of existing data, composite FKs, uniqueness per shop, RLS.
+- Every query and action scoped to the shop.
+- Platform pages: list and create shops (with their owner login), edit a shop, turn it off or
+  on, reset an owner's password.
+- Shop settings page (name, address, phone printed on orders).
+- Seed with two shops plus a platform admin; isolation tests.
+- `pnpm platform-admin:create` for production; DEPLOYMENT.md "upgrading to v2".
+
+**Phase 7: Stock correction and order cancellation**
+
+- "Correct stock" on the item page (owner).
+- "Cancel order" on the order page (owner) with reason; stock returned.
+- "Cancelled" shown in lists, history and the dashboard; excluded from sales totals.
+
+**Phase 8: Customer payments and outstanding**
+
+- Payments table.
+- Record payment on the customer page; payment list with void (owner).
+- Outstanding on the customer list (filter and sort by dues) and customer page.
+- "Paid now" at checkout; paid amount shown on the order and print.
+- Dashboard: total to collect, and today's collections.

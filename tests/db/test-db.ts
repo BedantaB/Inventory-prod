@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { qtyToDb } from "@/lib/qty";
 
@@ -34,6 +34,25 @@ export async function createTestDb() {
 
 export type TestDb = Awaited<ReturnType<typeof createTestDb>>["db"];
 
+/** A shop with the default units, like the platform admin creates. */
+export async function createShop(db: TestDb, name = "Test Shop") {
+  const [shop] = await db.insert(schema.shops).values({ name }).returning();
+  await db.execute(sql`SELECT public.create_default_units(${shop.id})`);
+  return shop;
+}
+
+const defaultShops = new WeakMap<TestDb, string>();
+
+/** The shop tests use when they don't ask for a specific one (created on first use). */
+export async function defaultShopId(db: TestDb): Promise<string> {
+  let id = defaultShops.get(db);
+  if (!id) {
+    id = (await createShop(db, "Default Test Shop")).id;
+    defaultShops.set(db, id);
+  }
+  return id;
+}
+
 export async function createUser(
   db: TestDb,
   {
@@ -41,20 +60,51 @@ export async function createUser(
     role = "STAFF",
     isActive = true,
     fullName = username,
-  }: { username: string; role?: "ADMIN" | "STAFF"; isActive?: boolean; fullName?: string },
+    shopId,
+    platformAdmin = false,
+  }: {
+    username: string;
+    role?: "ADMIN" | "STAFF";
+    isActive?: boolean;
+    fullName?: string;
+    shopId?: string;
+    platformAdmin?: boolean;
+  },
 ) {
   const id = crypto.randomUUID();
   const email = `${username}@staff.test`;
   await db.execute(`INSERT INTO auth.users (id, email) VALUES ('${id}', '${email}')`);
   const [profile] = await db
     .insert(schema.profiles)
-    .values({ id, username, fullName, email, role, isActive })
+    .values({
+      id,
+      username,
+      fullName,
+      email,
+      role,
+      isActive,
+      isPlatformAdmin: platformAdmin,
+      shopId: platformAdmin ? null : (shopId ?? (await defaultShopId(db))),
+    })
     .returning();
   return profile;
 }
 
-export async function getUnit(db: TestDb, name: string) {
-  const [unit] = await db.select().from(schema.units).where(eq(schema.units.name, name));
+/** The shop a test user belongs to. */
+export async function shopOf(db: TestDb, userId: string): Promise<string> {
+  const [p] = await db
+    .select({ shopId: schema.profiles.shopId })
+    .from(schema.profiles)
+    .where(eq(schema.profiles.id, userId));
+  return p.shopId!;
+}
+
+export async function getUnit(db: TestDb, name: string, shopId?: string) {
+  const shop = shopId ?? (await defaultShopId(db));
+  const [unit] = await db
+    .select()
+    .from(schema.units)
+    .where(and(eq(schema.units.name, name), eq(schema.units.shopId, shop)));
   return unit;
 }
 
@@ -63,10 +113,11 @@ export async function createItem(
   userId: string,
   values: { name: string; unit?: string; sku?: string },
 ) {
-  const unit = await getUnit(db, values.unit ?? "pcs");
+  const shopId = await shopOf(db, userId);
+  const unit = await getUnit(db, values.unit ?? "pcs", shopId);
   const [item] = await db
     .insert(schema.items)
-    .values({ name: values.name, sku: values.sku, unitId: unit.id, createdBy: userId })
+    .values({ shopId, name: values.name, sku: values.sku, unitId: unit.id, createdBy: userId })
     .returning();
   return item;
 }
@@ -84,13 +135,15 @@ export async function stockIn(
   qtyMilli: number,
   unitCostPaise: number,
 ) {
+  const shopId = await shopOf(db, userId);
   const [entry] = await db
     .insert(schema.stockEntries)
-    .values({ reference: "TEST", createdBy: userId })
+    .values({ shopId, reference: "TEST", createdBy: userId })
     .returning();
   const [movement] = await db
     .insert(schema.stockMovements)
     .values({
+      shopId,
       type: "IN",
       itemId,
       quantityChange: qtyToDb(qtyMilli),

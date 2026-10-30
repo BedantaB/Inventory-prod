@@ -3,6 +3,7 @@ import {
   PackageIcon,
   PackagePlusIcon,
   ReceiptTextIcon,
+  Settings2Icon,
   ShoppingCartIcon,
   StoreIcon,
   UserCogIcon,
@@ -27,6 +28,13 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/orders", label: "orders", icon: ReceiptTextIcon, inBottomBar: false },
   { href: "/customers", label: "customers", icon: StoreIcon, inBottomBar: false },
   { href: "/users", label: "users", icon: UserCogIcon, inBottomBar: false, adminOnly: true },
+  {
+    href: "/settings",
+    label: "settings",
+    icon: Settings2Icon,
+    inBottomBar: false,
+    adminOnly: true,
+  },
 ];
 
 /** Which nav item a URL belongs to. "/orders/new" is New Order, other /orders pages are Orders. */

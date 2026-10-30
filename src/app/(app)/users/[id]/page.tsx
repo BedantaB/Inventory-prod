@@ -26,7 +26,7 @@ export default function EditUserPage({ params }: PageProps<"/users/[id]">) {
 async function EditUser({ params }: Pick<PageProps<"/users/[id]">, "params">) {
   const m = getMessages();
   const actor = await requireAdminPage();
-  const user = await getUserById((await params).id);
+  const user = await getUserById(actor.shopId, (await params).id);
   if (!user) notFound();
   const isSelf = user.id === actor.id;
 

@@ -2,8 +2,9 @@
 
 # Inventory app — working notes
 
-Inventory, stock and orders for an Indian wholesale business. Used by non-technical staff on
-low-end Android phones (godown) and a desktop (counter). Full design: `docs/PLAN.md`.
+Inventory, stock and orders for Indian wholesale businesses. Several completely separate shops
+share one deployment; each has its own logins and data. Used by non-technical staff on low-end
+Android phones (godown) and a desktop (counter). Full design: `docs/PLAN.md`.
 Ideas not in scope go to `ROADMAP.md` — do not build unlisted features.
 
 ## Commands
@@ -21,7 +22,7 @@ pnpm db:generate --name=<what_changed>   # after editing src/db/schema/*
 pnpm db:generate --custom --name=<name>  # hand-written SQL migration (triggers, RLS, data)
 pnpm db:migrate        # apply migrations to MIGRATION_DATABASE_URL
 pnpm db:seed           # DEV ONLY: logins + sample data (add --reset to wipe business data first)
-pnpm owner:create      # production: create the owner login only (ENV_FILE=.env.production.local)
+pnpm platform-admin:create  # production: create the platform admin login (ENV_FILE=.env.production.local)
 # ENV_FILE=.env.production.local pnpm db:migrate   → migrate production (see DEPLOYMENT.md)
 ```
 
@@ -61,7 +62,9 @@ e2e/                Playwright flows
 ## Patterns
 
 - **Auth:**
-  - `requireUser()` / `requireAdminPage()` come from `src/features/auth/session.ts`.
+  - `requireUser()` / `requireAdminPage()` come from `src/features/auth/session.ts`. They return
+    the shop user, including `shopId`. `requirePlatformAdmin()` is for `/platform` pages and
+    actions. `requireSignedIn()` accepts either kind of login (own password only).
   - Role checks use `can(user, permission)` from `src/features/auth/permissions.ts`.
   - The `(app)` layout also redirects signed-out or turned-off users, even on pages that load
     no data.
@@ -99,11 +102,28 @@ e2e/                Playwright flows
   - Search, filters and paging live in the URL (`src/lib/list-params.ts`): `<SearchBox>`,
     `<FilterSelect>`, `<Pagination>`, 20 rows per page from the server.
 - **Photos:** resized on the phone (`compress-photo.ts`), stored in the private bucket, and
-  served by `/photos/...` after a login check.
+  served by `/photos/...` only to logins of the shop whose item uses the photo.
 - **Text:** server components use `getMessages()`; client components use `useMessages()` /
   `useT()`.
 
 ## Rules that must not be broken
+
+**Shops (multi-tenant)**
+
+- Every business table has `shop_id` (`shopRef()` in `src/db/schema/columns.ts`). Every
+  `data.ts` function takes `shopId` as its 2nd parameter, and every query filters on it,
+  including updates and deletes. Pass `actor.shopId` from `requireUser()`; never take a shop id
+  from the client.
+- References between business tables are composite foreign keys `(shop_id, x_id) →
+  parent(shop_id, id)`, so the database rejects rows that mix shops. New tables follow the same
+  pattern and add `unique (shop_id, id)` if other tables reference them.
+- Names and numbers are unique **per shop** (SKUs, unit/category/brand names, order numbers,
+  `order_counters`). Usernames are unique across all shops, because they are the login.
+- One login = one shop. The platform admin (`profiles.is_platform_admin`, no `shop_id`) creates
+  and turns shops on/off, and sees no shop data. A turned-off shop signs out all its logins.
+- RLS policies use `current_shop_id()`. New shops get their units from
+  `create_default_units(shop_id)`.
+- `tests/db/shop-isolation.test.ts` covers this; extend it for every new table or data function.
 
 **Money**
 
