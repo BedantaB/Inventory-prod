@@ -19,6 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "@/i18n";
 import { useMessages } from "@/i18n/provider";
+import { formatINR } from "@/lib/money";
 import { cancelOrderAction } from "../actions";
 
 const schema = z.object({
@@ -26,7 +27,16 @@ const schema = z.object({
 });
 
 /** Owner: cancel a completed order, with a reason. Stock goes back; the order stays on record. */
-export function CancelOrderDialog({ id, number }: { id: string; number: string }) {
+export function CancelOrderDialog({
+  id,
+  number,
+  paidPaise,
+}: {
+  id: string;
+  number: string;
+  /** Paid with this order: it stays as the customer's credit after cancelling. */
+  paidPaise: number;
+}) {
   const m = useMessages();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -51,6 +61,11 @@ export function CancelOrderDialog({ id, number }: { id: string; number: string }
           <DialogTitle className="text-xl">{format(m.orders.cancelTitle, { number })}</DialogTitle>
           <DialogDescription className="text-base">{m.orders.cancelBody}</DialogDescription>
         </DialogHeader>
+        {paidPaise > 0 && (
+          <p className="rounded-lg border border-warning p-3 text-base">
+            {format(m.payments.cancelWithPayment, { amount: formatINR(paidPaise) })}
+          </p>
+        )}
         <form {...formProps} className="flex flex-col gap-5">
           <FormField
             name="reason"

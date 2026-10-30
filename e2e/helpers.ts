@@ -91,6 +91,11 @@ export async function cleanupTestData() {
           UNION
           SELECT order_id FROM order_lines WHERE item_id IN (SELECT id FROM items WHERE name LIKE 'E2E %')`
       ).map((r) => r.id);
+      // Payments can't be deleted by the app either (trigger protect_payments).
+      await tx`ALTER TABLE payments DISABLE TRIGGER protect_payments`;
+      await tx`DELETE FROM payments WHERE order_id = ANY(${orderIds}::uuid[])
+                 OR vendor_id IN (SELECT id FROM vendors WHERE business_name LIKE 'E2E %')`;
+      await tx`ALTER TABLE payments ENABLE TRIGGER protect_payments`;
       await tx`ALTER TABLE stock_movements DISABLE TRIGGER stock_movements_immutable`;
       await tx`ALTER TABLE orders DISABLE TRIGGER protect_completed_orders`;
       await tx`ALTER TABLE order_lines DISABLE TRIGGER protect_completed_order_lines`;

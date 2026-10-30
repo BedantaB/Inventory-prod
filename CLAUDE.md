@@ -131,6 +131,12 @@ parent(shop_id, id)`, so the database rejects rows that mix shops. New tables fo
 - Show money only via `formatINR()` (`src/lib/money.ts`) → `₹1,23,456.00`.
 - Parse typed amounts with `rupeesToPaise()`.
 - No GST anywhere for now (owner's decision; it's in ROADMAP).
+- **Outstanding** = completed orders − payments not voided (`outstandingSql`,
+  `customerBalance()` in `features/payments/data.ts`). Cancelled orders and voided payments never
+  count; below zero = advance.
+- Payments are never edited or deleted (IV007); the owner voids a wrong one (who, when, why).
+  A payment with an `order_id` ("Paid now", written inside `checkoutDraft`) must match that
+  order's customer and be on a completed order (IV008). Paid now ≤ order total.
 
 **Quantities**
 

@@ -4,17 +4,22 @@ import { Button } from "@/components/ui/button";
 import { format, getMessages } from "@/i18n";
 import { PAGE_SIZE } from "@/lib/list-params";
 
-/** "Showing 21–40 of 55" with big Previous / Next buttons. Keeps the other URL parameters. */
+/**
+ * "Showing 21–40 of 55" with big Previous / Next buttons. Keeps the other URL parameters.
+ * `param` lets two lists on one page page separately (default "page").
+ */
 export function Pagination({
   page,
   total,
   pathname,
   searchParams,
+  param = "page",
 }: {
   page: number;
   total: number;
   pathname: string;
   searchParams: Record<string, string | string[] | undefined>;
+  param?: string;
 }) {
   const m = getMessages();
   if (total <= PAGE_SIZE && page === 1) return null;
@@ -23,9 +28,9 @@ export function Pagination({
   const href = (target: number) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(searchParams)) {
-      if (key !== "page" && typeof value === "string") params.set(key, value);
+      if (key !== param && typeof value === "string") params.set(key, value);
     }
-    if (target > 1) params.set("page", String(target));
+    if (target > 1) params.set(param, String(target));
     const query = params.toString();
     return query ? `${pathname}?${query}` : pathname;
   };

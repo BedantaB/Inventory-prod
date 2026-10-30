@@ -20,6 +20,7 @@ import {
   orderCounters,
   orderLines,
   orders,
+  payments,
   profiles,
   stockMovements,
   units,
@@ -31,6 +32,7 @@ import { itemDisplayName } from "@/features/items/data";
 import { financialYear, formatOrderNumber } from "@/lib/financial-year";
 import { PAGE_SIZE, searchPatterns } from "@/lib/list-params";
 import { lineTotalPaise, qtyFromDb, qtyToDb, QTY_SCALE } from "@/lib/qty";
+import type { PaymentMethod } from "@/features/payments/schemas";
 import { orderTotals, type DiscountKind } from "./totals";
 
 // Orders: drafts (the cart), checkout, and completed orders. Takes `db` so it can be tested
@@ -366,7 +368,8 @@ export type CheckoutProblem =
   | { key: "orders.emptyCart" }
   | { key: "orders.missingPrice"; lineIds: string[] }
   | { key: "orders.itemArchived"; lineIds: string[] }
-  | { key: "items.decimalNotAllowed"; lineIds: string[] };
+  | { key: "items.decimalNotAllowed"; lineIds: string[] }
+  | { key: "payments.paidTooMuch" };
 
 export type CheckoutResult =
   | { status: "completed"; id: string; orderNumber: string }
@@ -384,6 +387,7 @@ export type CheckoutResult =
  *  5. calculate totals from the database, take the next order number for the financial year
  *  6. write one stock-OUT movement per line (the trigger lowers stock and records the cost)
  *  7. mark the order COMPLETED
+ *  8. record the "Paid now" payment, if any (never more than the total)
  * Nothing is written before step 5, so a rejected checkout changes nothing.
  */
 export async function checkoutDraft(
@@ -392,6 +396,7 @@ export async function checkoutDraft(
   orderId: string,
   actorId: string,
   at: Date = new Date(),
+  paidNow: { amountPaise: number; method: PaymentMethod } | null = null,
 ): Promise<CheckoutResult> {
   return db.transaction(async (tx) => {
     const [order] = await tx
@@ -495,6 +500,9 @@ export async function checkoutDraft(
       unitPricePaise: l.unitPricePaise!,
     }));
     const totals = orderTotals(priced, { kind: order.discountKind, value: order.discountValue });
+    if (paidNow && paidNow.amountPaise > totals.total) {
+      return { status: "problems", problems: [{ key: "payments.paidTooMuch" }] };
+    }
 
     // Next order number for this financial year (rolls back with the transaction, so no gaps).
     const fy = financialYear(at);
@@ -544,6 +552,18 @@ export async function checkoutDraft(
       })
       .where(eq(orders.id, orderId));
 
+    if (paidNow) {
+      await tx.insert(payments).values({
+        shopId,
+        vendorId: order.vendorId!,
+        orderId,
+        amountPaise: paidNow.amountPaise,
+        method: paidNow.method,
+        receivedAt: at,
+        createdBy: actorId,
+      });
+    }
+
     return { status: "completed", id: orderId, orderNumber };
   });
 }
@@ -572,6 +592,10 @@ export async function getOrder(db: Database, shopId: string, orderId: string, sh
       cancelledAt: orders.cancelledAt,
       cancelReason: orders.cancelReason,
       cancelledByName: cancelledByProfile.fullName,
+      paidPaise: sql<number>`(
+        SELECT coalesce(sum(p.amount_paise), 0) FROM payments p
+         WHERE p.order_id = ${orders.id} AND p.voided_at IS NULL
+      )`.mapWith(Number),
       customerId: vendors.id,
       customerName: vendors.businessName,
       customerPhone: vendors.phone,

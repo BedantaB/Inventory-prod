@@ -1,8 +1,10 @@
 import { ChevronRightIcon, PhoneIcon, PlusIcon, SearchXIcon, StoreIcon } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, type Messages } from "@/i18n";
+import { formatINR } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 
 type CustomerRow = {
@@ -12,6 +14,7 @@ type CustomerRow = {
   phone: string;
   city: string | null;
   orderCount: number;
+  outstandingPaise: number;
 };
 
 export function CustomerList({
@@ -61,8 +64,20 @@ export function CustomerList({
                 {[c.contactPerson, c.city, formatPhone(c.phone)].filter(Boolean).join(" · ")}
               </span>
             </span>
-            <span className="hidden text-sm whitespace-nowrap text-muted-foreground sm:inline">
-              {format(m.customers.ordersCount, { count: c.orderCount })}
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              {c.outstandingPaise > 0 && (
+                <Badge variant="outline" className="border-destructive text-sm text-destructive">
+                  {format(m.payments.dueBadge, { amount: formatINR(c.outstandingPaise) })}
+                </Badge>
+              )}
+              {c.outstandingPaise < 0 && (
+                <Badge variant="outline" className="border-success text-sm text-success">
+                  {format(m.payments.advanceBadge, { amount: formatINR(-c.outstandingPaise) })}
+                </Badge>
+              )}
+              <span className="hidden text-sm whitespace-nowrap text-muted-foreground sm:inline">
+                {format(m.customers.ordersCount, { count: c.orderCount })}
+              </span>
             </span>
             <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
           </Link>

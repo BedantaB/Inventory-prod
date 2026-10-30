@@ -5,6 +5,8 @@ export const DB_ERROR = {
   ledgerImmutable: "IV003",
   orderCompleted: "IV004",
   returnNeedsCancelledOrder: "IV006",
+  paymentImmutable: "IV007",
+  paymentOrderMismatch: "IV008",
   uniqueViolation: "23505",
   checkViolation: "23514",
   foreignKeyViolation: "23503",

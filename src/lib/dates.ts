@@ -27,6 +27,13 @@ export function formatDateTime(date: Date): string {
   return dateTimeFormatter.format(date);
 }
 
+const dateBoxFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TIME_ZONE });
+
+/** The Indian date as a date box writes it: "2026-10-30". */
+export function istDateString(date: Date): string {
+  return dateBoxFormatter.format(date);
+}
+
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** "2026-10-28" (from a date box) → that day's start in Indian time, or null if not a real date. */

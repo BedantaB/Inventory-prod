@@ -11,6 +11,7 @@ const all: Permission[] = [
   "manageShop",
   "correctStock",
   "cancelOrder",
+  "voidPayment",
 ];
 
 describe("can", () => {

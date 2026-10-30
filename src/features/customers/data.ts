@@ -1,18 +1,20 @@
 import { and, asc, desc, eq, ilike, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { orderLines, orders, vendors } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { outstandingSql } from "@/features/payments/data";
 import { PAGE_SIZE, searchPatterns } from "@/lib/list-params";
 import type { CustomerInput } from "./schemas";
 
 // Customers = the `vendors` table (the businesses we sell to).
 
-export const CUSTOMER_SORTS = ["name", "city", "recent"] as const;
+export const CUSTOMER_SORTS = ["name", "city", "recent", "dues"] as const;
 export type CustomerSort = (typeof CUSTOMER_SORTS)[number];
 
 const sortOrder: Record<CustomerSort, SQL[]> = {
   name: [asc(sql`lower(${vendors.businessName})`)],
   city: [asc(sql`lower(coalesce(${vendors.city}, ''))`), asc(sql`lower(${vendors.businessName})`)],
   recent: [desc(vendors.createdAt)],
+  dues: [desc(outstandingSql), asc(sql`lower(${vendors.businessName})`)],
 };
 
 const customerColumns = {
@@ -33,7 +35,14 @@ export type CustomerView = NonNullable<Awaited<ReturnType<typeof getCustomer>>>;
 export async function listCustomers(
   db: Database,
   shopId: string,
-  params: { q?: string; sort?: CustomerSort; page?: number; archived?: boolean },
+  params: {
+    q?: string;
+    sort?: CustomerSort;
+    page?: number;
+    archived?: boolean;
+    /** Only customers who owe money. */
+    owing?: boolean;
+  },
 ) {
   const page = params.page ?? 1;
   const conditions: (SQL | undefined)[] = [
@@ -50,6 +59,7 @@ export async function listCustomers(
       ),
     );
   }
+  if (params.owing) conditions.push(sql`${outstandingSql} > 0`);
   const where = and(...conditions);
 
   const [rows, [{ total }]] = await Promise.all([
@@ -61,6 +71,7 @@ export async function listCustomers(
           sql<number>`(SELECT count(*) FROM orders o WHERE o.vendor_id = vendors.id AND o.status = 'COMPLETED')`.mapWith(
             Number,
           ),
+        outstandingPaise: outstandingSql.mapWith(Number),
       })
       .from(vendors)
       .where(where)

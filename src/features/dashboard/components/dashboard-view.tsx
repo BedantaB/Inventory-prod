@@ -2,11 +2,13 @@ import {
   AlertTriangleIcon,
   ChevronRightIcon,
   ClipboardListIcon,
+  HandCoinsIcon,
   IndianRupeeIcon,
   PackageIcon,
   PackagePlusIcon,
   ReceiptTextIcon,
   ShoppingCartIcon,
+  UsersIcon,
   WalletIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -101,13 +103,26 @@ export function DashboardView({ data, m }: { data: Dashboard; m: Messages }) {
         </Link>
       )}
 
-      <section aria-label={m.home.summary} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-label={m.home.summary} className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Stat
           icon={IndianRupeeIcon}
           label={m.home.todaySales}
           value={formatINR(data.today.salesPaise)}
           hint={format(m.home.ordersToday, { count: data.today.orders })}
           href="/orders"
+        />
+        <Stat
+          icon={HandCoinsIcon}
+          label={m.payments.collectedToday}
+          value={formatINR(data.collectedToday.totalPaise)}
+          hint={format(m.payments.collectedTodayDetail, { count: data.collectedToday.count })}
+        />
+        <Stat
+          icon={UsersIcon}
+          label={m.payments.toCollect}
+          value={formatINR(data.toCollectPaise)}
+          hint={m.payments.toCollectHint}
+          href="/customers?dues=owing&sort=dues"
         />
         <Stat
           icon={PackageIcon}

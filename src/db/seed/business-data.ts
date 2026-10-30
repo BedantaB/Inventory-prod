@@ -31,7 +31,7 @@ function paise(rupees: number) {
 /** Removes all items, customers, stock and orders of every shop. Shops, logins and units are kept. */
 export async function wipeBusinessData(db: Database) {
   await db.execute(sql`
-    TRUNCATE order_lines, stock_movements, orders, stock_entries, items, categories, brands, vendors, order_counters
+    TRUNCATE payments, order_lines, stock_movements, orders, stock_entries, items, categories, brands, vendors, order_counters
   `);
   await db.execute(sql`ALTER SEQUENCE item_sku_seq RESTART`);
 }

@@ -61,6 +61,7 @@ async function CustomersResults({ searchParams }: Pick<PageProps<"/customers">, 
     sort: parseChoice(sp.sort, CUSTOMER_SORTS, "name"),
     page: parsePage(sp.page),
     archived: canSeeArchived && view === "archived",
+    owing: parseChoice(sp.dues, ["all", "owing"] as const, "all") === "owing",
   };
   const list = await listCustomers(user.shopId, params);
 
@@ -75,6 +76,16 @@ async function CustomersResults({ searchParams }: Pick<PageProps<"/customers">, 
             { value: "name", label: m.customers.sortName },
             { value: "city", label: m.customers.sortCity },
             { value: "recent", label: m.customers.sortRecent },
+            { value: "dues", label: m.payments.sortDues },
+          ]}
+        />
+        <FilterSelect
+          param="dues"
+          label={m.payments.duesFilter}
+          defaultValue="all"
+          options={[
+            { value: "all", label: m.payments.duesAll },
+            { value: "owing", label: m.payments.duesOnly },
           ]}
         />
         {canSeeArchived && (
@@ -89,7 +100,11 @@ async function CustomersResults({ searchParams }: Pick<PageProps<"/customers">, 
           />
         )}
       </div>
-      <CustomerList customers={list.rows} filtered={Boolean(params.q || params.archived)} m={m} />
+      <CustomerList
+        customers={list.rows}
+        filtered={Boolean(params.q || params.archived || params.owing)}
+        m={m}
+      />
       <Pagination page={list.page} total={list.total} pathname="/customers" searchParams={sp} />
     </>
   );

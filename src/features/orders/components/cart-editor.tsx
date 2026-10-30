@@ -35,6 +35,7 @@ import {
   setDiscountAction,
   updateLineAction,
 } from "../actions";
+import { PAYMENT_METHODS, type PaymentMethod } from "@/features/payments/schemas";
 import type { DraftLine, DraftView, Shortage } from "../data";
 import { orderTotals, parsePercent, percentToInput, type DiscountKind } from "../totals";
 import { CartLine, parseLine, type CartLineState } from "./cart-line";
@@ -259,6 +260,17 @@ export function CartEditor({ draft }: { draft: DraftView }) {
     { kind: discountKind, value: discountValue ?? 0 },
   );
 
+  // "Paid now" is only kept on this screen: it is recorded together with the order at checkout.
+  const [paidText, setPaidText] = useState("");
+  const [paidMethod, setPaidMethod] = useState<PaymentMethod>("CASH");
+  const paidPaise = paidText.trim() === "" ? 0 : rupeesToPaise(paidText);
+  const paidError =
+    paidPaise === null
+      ? m.payments.invalidAmount
+      : paidPaise > totals.total
+        ? m.payments.paidTooMuch
+        : undefined;
+
   const checkout = () =>
     startCheckout(async () => {
       const allSaved = await saver.flush();
@@ -267,10 +279,13 @@ export function CartEditor({ draft }: { draft: DraftView }) {
         setCustomerError(m.orders.chooseCustomer);
         return void toast.error(m.orders.chooseCustomer);
       }
-      if (linesRef.current.some((l) => l.error) || discountError)
+      if (linesRef.current.some((l) => l.error) || discountError || paidError)
         return void toast.error(m.orders.fixFirst);
 
-      const result = await checkoutAction(orderId);
+      const result = await checkoutAction(
+        orderId,
+        paidPaise ? { amount: paidText, method: paidMethod } : null,
+      );
       if (result.ok) {
         router.replace(`/orders/${result.id}?done=1`);
         return;
@@ -439,6 +454,63 @@ export function CartEditor({ draft }: { draft: DraftView }) {
           <span className="text-2xl font-bold" data-testid="cart-total">
             {formatINR(totals.total)}
           </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5 border-t pt-3">
+          <label htmlFor={`${orderId}-paid`} className="text-base">
+            {m.payments.paidNow}{" "}
+            <span className="text-muted-foreground">({m.common.optional})</span>
+          </label>
+          <div className="flex gap-2">
+            <MoneyInput
+              id={`${orderId}-paid`}
+              value={paidText}
+              onChange={(e) => setPaidText(e.target.value)}
+              placeholder="0"
+              className="flex-1"
+              aria-invalid={paidError ? true : undefined}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPaidText(paiseToInput(totals.total))}
+              disabled={totals.total === 0}
+            >
+              {m.payments.payFull}
+            </Button>
+          </div>
+          <div role="radiogroup" aria-label={m.payments.method} className="flex flex-wrap gap-2">
+            {PAYMENT_METHODS.map((method) => (
+              <button
+                key={method}
+                type="button"
+                role="radio"
+                aria-checked={paidMethod === method}
+                onClick={() => setPaidMethod(method)}
+                className={cn(
+                  "min-h-11 rounded-lg border px-3 text-base font-semibold",
+                  paidMethod === method
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {m.payments[`method${method}`]}
+              </button>
+            ))}
+          </div>
+          <p
+            className={cn(
+              "text-sm",
+              paidError ? "font-medium text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {paidError ??
+              (paidPaise
+                ? format(m.payments.balanceAfter, {
+                    balance: formatINR(Math.max(0, totals.total - paidPaise)),
+                  })
+                : m.payments.paidNowHint)}
+          </p>
         </div>
       </section>
 

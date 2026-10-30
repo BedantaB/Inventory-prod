@@ -165,6 +165,20 @@ export function OrderDetails({
           <dd className="border-t pt-2 text-right text-lg font-bold">
             {formatINR(order.totalPaise)}
           </dd>
+          {order.paidPaise > 0 && (
+            <>
+              <dt>{m.payments.paidOnOrder}</dt>
+              <dd className="text-right">− {formatINR(order.paidPaise)}</dd>
+              {!cancelled && (
+                <>
+                  <dt className="font-semibold">{m.payments.balanceOnOrder}</dt>
+                  <dd className="text-right font-semibold">
+                    {formatINR(Math.max(0, order.totalPaise - order.paidPaise))}
+                  </dd>
+                </>
+              )}
+            </>
+          )}
         </dl>
 
         <p className="text-sm text-muted-foreground">
@@ -174,7 +188,9 @@ export function OrderDetails({
 
       {(canCancel || canArchive) && (
         <div className="flex flex-wrap gap-3 print:hidden">
-          {canCancel && !cancelled && <CancelOrderDialog id={order.id} number={number} />}
+          {canCancel && !cancelled && (
+            <CancelOrderDialog id={order.id} number={number} paidPaise={order.paidPaise} />
+          )}
           {canArchive && (
             <OrderArchiveAction
               id={order.id}

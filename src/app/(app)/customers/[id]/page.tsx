@@ -18,11 +18,15 @@ import { startOrderAction } from "@/features/orders/actions";
 import { StartOrderButton } from "@/features/orders/components/start-order-button";
 import { CustomerArchiveAction } from "@/features/customers/components/customer-archive-action";
 import { getCustomer, listCustomerOrders } from "@/features/customers/queries";
+import { PaymentsList } from "@/features/payments/components/payments-list";
+import { RecordPaymentDialog } from "@/features/payments/components/record-payment-dialog";
+import { customerBalance, listCustomerPayments } from "@/features/payments/queries";
 import { format, getMessages } from "@/i18n";
-import { formatDate } from "@/lib/dates";
+import { formatDate, istDateString } from "@/lib/dates";
 import { parsePage } from "@/lib/list-params";
 import { formatINR } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Customer" };
 
@@ -41,7 +45,12 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
   const sp = await searchParams;
   const customer = await getCustomer(user.shopId, id);
   if (!customer) notFound();
-  const history = await listCustomerOrders(user.shopId, customer.id, parsePage(sp.page));
+  const [history, balance, paymentList] = await Promise.all([
+    listCustomerOrders(user.shopId, customer.id, parsePage(sp.page)),
+    customerBalance(user.shopId, customer.id),
+    listCustomerPayments(user.shopId, customer.id, parsePage(sp.ppage)),
+  ]);
+  const outstanding = balance.outstandingPaise;
 
   const facts: [string, string | null][] = [
     [m.customers.contactPerson, customer.contactPerson],
@@ -81,6 +90,37 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
             <StartOrderButton label={m.orders.newForCustomer} />
           </form>
         )}
+        <Card>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {outstanding > 0
+                  ? m.payments.owes
+                  : outstanding < 0
+                    ? m.payments.advance
+                    : m.payments.outstanding}
+              </p>
+              <p
+                className={cn(
+                  "text-3xl font-bold",
+                  outstanding > 0 ? "text-destructive" : outstanding < 0 && "text-success",
+                )}
+                data-testid="customer-outstanding"
+              >
+                {formatINR(Math.abs(outstanding))}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {m.payments.ordersTotal} {formatINR(balance.ordersPaise)} · {m.payments.paidTotal}{" "}
+                {formatINR(balance.paidPaise)}
+              </p>
+            </div>
+            <RecordPaymentDialog
+              customer={{ id: customer.id, name: customer.businessName }}
+              today={istDateString(new Date())}
+            />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">{m.customers.details}</CardTitle>
@@ -167,6 +207,25 @@ async function CustomerDetails({ params, searchParams }: PageProps<"/customers/[
             total={history.total}
             pathname={`/customers/${customer.id}`}
             searchParams={sp}
+          />
+        </section>
+
+        <section aria-labelledby="payments-heading">
+          <h2 id="payments-heading" className="mb-3 text-xl font-bold">
+            {m.payments.history}
+          </h2>
+          <PaymentsList
+            rows={paymentList.rows}
+            customerId={customer.id}
+            canVoid={can(user, "voidPayment")}
+            m={m}
+          />
+          <Pagination
+            page={paymentList.page}
+            total={paymentList.total}
+            pathname={`/customers/${customer.id}`}
+            searchParams={sp}
+            param="ppage"
           />
         </section>
 

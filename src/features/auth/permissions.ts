@@ -13,7 +13,8 @@ export type Permission =
   | "importItems" // add many items at once from a spreadsheet
   | "manageShop" // change the shop's name, address and phone
   | "correctStock" // set an item's stock to the counted quantity
-  | "cancelOrder"; // cancel a completed order (stock goes back)
+  | "cancelOrder" // cancel a completed order (stock goes back)
+  | "voidPayment"; // mark a wrong payment as void
 
 const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
   "manageUsers",
@@ -25,6 +26,7 @@ const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
   "manageShop",
   "correctStock",
   "cancelOrder",
+  "voidPayment",
 ]);
 
 export function can(user: { role: Role }, permission: Permission): boolean {

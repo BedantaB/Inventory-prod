@@ -6,15 +6,15 @@ Ideas that are **not** part of v1. Each one waits for the owner's go-ahead.
 
 - **GST**: GST rate and HSN code per item, customer GSTIN, CGST/SGST/IGST breakdown, and
   GST-compliant tax invoices. Order lines would need to store the rate and HSN at the time of sale.
-- **Payments and credit (udhaar)**: record payments against orders, customer balances, and an
-  outstanding dues list.
+- **Customer statement**: a printable list of a customer's orders and payments with the running
+  balance, and payment reminders by WhatsApp or SMS (payments and outstanding are built).
 - **Profit reports**: sales minus cost per order, item, customer and month. The data is already
   captured, because every sale records the average cost at the time of sale.
 
 ## Stock
 
-- **Stock correction screen**: count the shelf and fix the number (`ADJUST` movements already
-  exist in the database), with a required reason.
+- **Stock count sheet**: count many items in one go (today each item is corrected on its own
+  page).
 - **Suppliers**: record who supplied each Add Stock bill, and keep purchase history per supplier.
 - **List of all stock bills**: browse every Add Stock entry by date or bill number. Today a bill
   is reached from the item's stock history.
@@ -24,7 +24,7 @@ Ideas that are **not** part of v1. Each one waits for the owner's go-ahead.
 
 ## Orders
 
-- **Cancel or return an order**: put the stock back with a reversing movement.
+- **Partial returns**: take back some items of an order (today the whole order is cancelled).
 - **PDF and WhatsApp sharing**: send the order or invoice to the customer.
 - **Reserving stock for drafts**: hold stock while a cart is open.
 

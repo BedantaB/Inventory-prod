@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
 import { items, orders, profiles, stockEntries, units, vendors } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { collections, totalToCollect } from "@/features/payments/data";
 import { itemDisplayName } from "@/features/items/data";
 import { qtyFromDb } from "@/lib/qty";
 
@@ -112,6 +113,11 @@ export async function getDashboard(
       .limit(8),
   ]);
 
+  const [toCollectPaise, collectedToday] = await Promise.all([
+    totalToCollect(db, shopId),
+    collections(db, shopId, today.start, today.end),
+  ]);
+
   // One "recent activity" list: stock bills and orders, newest first.
   const recent = [
     ...recentEntries.map((e) => ({
@@ -154,6 +160,8 @@ export async function getDashboard(
     })),
     today: { orders: sales[0].count, salesPaise: sales[0].totalPaise },
     drafts: drafts[0].count,
+    toCollectPaise,
+    collectedToday,
     recent,
   };
 }

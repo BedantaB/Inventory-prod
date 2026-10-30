@@ -7,6 +7,8 @@ import { getDb } from "@/db";
 import { can } from "@/features/auth/permissions";
 import { requireUser } from "@/features/auth/session";
 import { MAX_PRICE_PAISE } from "@/features/items/schemas";
+import { paidNowSchema } from "@/features/payments/schemas";
+import type { MessageKey } from "@/i18n";
 import { failure, parseForm, success, type ActionResult, type Message } from "@/lib/forms";
 import { rupeesToPaise } from "@/lib/money";
 import { parseQty } from "@/lib/qty";
@@ -126,11 +128,28 @@ export type CheckoutActionResult =
   | { ok: true; id: string; orderNumber: string }
   | { ok: false; message: Message; shortages?: data.Shortage[]; lineIds?: string[] };
 
-/** Complete the order. The server re-checks everything from the database. */
-export async function checkoutAction(orderId: string): Promise<CheckoutActionResult> {
+/**
+ * Complete the order, optionally with money paid right now. The server re-checks everything
+ * from the database.
+ */
+export async function checkoutAction(
+  orderId: string,
+  paid: { amount: string; method: string } | null = null,
+): Promise<CheckoutActionResult> {
   const actor = await requireUser();
   if (!isUuid(orderId)) return { ok: false, message: { key: "orders.notFound" } };
-  const result = await data.checkoutDraft(getDb(), actor.shopId, orderId, actor.id);
+  const paidNow = paidNowSchema.safeParse({ paidNow: paid?.amount, paidMethod: paid?.method });
+  if (!paidNow.success) {
+    return { ok: false, message: { key: paidNow.error.issues[0].message as MessageKey } };
+  }
+  const result = await data.checkoutDraft(
+    getDb(),
+    actor.shopId,
+    orderId,
+    actor.id,
+    new Date(),
+    paidNow.data,
+  );
 
   switch (result.status) {
     case "completed":
@@ -138,6 +157,7 @@ export async function checkoutAction(orderId: string): Promise<CheckoutActionRes
       revalidatePath("/orders");
       revalidatePath("/orders/new");
       revalidatePath("/items");
+      revalidatePath("/customers");
       revalidatePath("/");
       return { ok: true, id: result.id, orderNumber: result.orderNumber };
     case "not-found":
